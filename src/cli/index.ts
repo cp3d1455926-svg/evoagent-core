@@ -1,0 +1,63 @@
+#!/usr/bin/env node
+/**
+ * EvoAgent CLI 入口
+ * 
+ * 用法:
+ *   evoagent                   启动交互式会话
+ *   evoagent -p "任务描述"      单次任务模式
+ *   evoagent gateway           启动网关 + Web 仪表台
+ *   evoagent status            查看状态
+ */
+
+import { Command } from 'commander';
+import { InteractiveCLI } from './interactive.js';
+import { runTask } from './single-task.js';
+import { startGateway } from '../gateway/server.js';
+import { showStatus } from './status.js';
+
+const program = new Command();
+
+program
+  .name('evoagent')
+  .description('EvoAgent — 融合 OpenClaw + Hermes + Claude Code 的 AI Agent')
+  .version('0.1.0');
+
+program
+  .option('-p, --prompt <task>', '单次任务模式')
+  .option('-c, --channel <channel>', '指定渠道 (cli/feishu/mcp/web)', 'cli')
+  .option('--thinking', '启用思考模式')
+  .option('--model <model>', '指定模型', 'claude-sonnet-4-20250514');
+
+program
+  .command('gateway')
+  .description('启动网关 + Web 仪表台')
+  .option('--port <port>', '端口号', '3000')
+  .action(async (options) => {
+    await startGateway(parseInt(options.port));
+  });
+
+program
+  .command('status')
+  .description('查看 EvoAgent 状态')
+  .action(showStatus);
+
+program
+  .command('plugins')
+  .description('管理插件')
+  .action(() => {
+    console.log('🔌 Plugin management - coming soon');
+  });
+
+program.parseAsync(process.argv).catch(err => {
+  console.error('Error:', err);
+  process.exit(1);
+});
+
+// 如果没有子命令，进入交互模式或单次任务
+const opts = program.opts();
+if (opts.prompt) {
+  await runTask(opts.prompt, opts);
+} else if (!process.argv.slice(2).some(a => ['gateway', 'status', 'plugins'].includes(a))) {
+  const cli = new InteractiveCLI(opts);
+  await cli.start();
+}

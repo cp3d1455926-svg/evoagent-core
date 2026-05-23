@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧬 EvoAgent Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    :root {
+      --bg: #0a0a0f;
+      --bg2: #12121a;
+      --bg3: #1a1a2e;
+      --border: #2a2a3e;
+      --text: #e0e0f0;
+      --text-dim: #8888aa;
+      --accent: #7c3aed;
+      --accent2: #06b6d4;
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+    }
+
+    body {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ─── 背景动效 ─────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(ellipse at 30% 20%, rgba(124,58,237,0.08) 0%, transparent 50%),
+                  radial-gradient(ellipse at 70% 80%, rgba(6,182,212,0.06) 0%, transparent 50%);
+      animation: bgFloat 20s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    @keyframes bgFloat {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(2%, -1%) rotate(1deg); }
+      66% { transform: translate(-1%, 2%) rotate(-1deg); }
+    }
+
+    /* ─── 布局 ─────────────────────────────────────── */
+    .app {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      grid-template-rows: 56px 1fr;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ─── 顶栏 ─────────────────────────────────────── */
+    .header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 1px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 12px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .status-dot.offline { background: var(--red); animation: none; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ─── 侧边栏 ───────────────────────────────────── */
+    .sidebar {
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      padding: 16px 0;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+      color: var(--text-dim);
+      border-left: 3px solid transparent;
+    }
+
+    .nav-item:hover { background: var(--bg3); color: var(--text); }
+    .nav-item.active {
+      background: rgba(124,58,237,0.1);
+      color: var(--accent);
+      border-left-color: var(--accent);
+    }
+
+    .nav-icon { font-size: 18px; }
+
+    /* ─── 主内容区 ─────────────────────────────────── */
+    .main {
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ─── 统计卡片 ─────────────────────────────────── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      transition: all 0.3s;
+    }
+
+    .stat-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(124,58,237,0.15);
+    }
+
+    .stat-label { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+    .stat-value { font-size: 28px; font-weight: 700; }
+    .stat-unit { font-size: 14px; color: var(--text-dim); margin-left: 4px; }
+
+    /* ─── 聊天面板 ─────────────────────────────────── */
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 160px);
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message {
+      display: flex;
+      gap: 12px;
+      max-width: 80%;
+      animation: msgIn 0.3s ease;
+    }
+
+    .message.user { align-self: flex-end; flex-direction: row-reverse; }
+    .message.bot { align-self: flex-start; }
+
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .message.user .avatar { background: var(--accent); }
+    .message.bot .background: var(--accent2); }
+
+    .bubble {
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .message.user .bubble {
+      background: var(--accent);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.bot .bubble {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .chat-input {
+      display: flex;
+      gap: 12px;
+      padding: 16px 20px;
+      background: var(--bg3);
+      border-top: 1px solid var(--border);
+    }
+
+    .chat-input input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .chat-input input:focus { border-color: var(--accent); }
+
+    .chat-input button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .chat-input button:hover { background: #6d28d9; transform: scale(1.02); }
+    .chat-input button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* ─── 日志面板 ─────────────────────────────────── */
+    .log-container {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      height: 400px;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .log-entry {
+      display: flex;
+      gap: 12px;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+
+    .log-time { color: var(--text-dim); flex-shrink: 0; }
+    .log-level { flex-shrink: 0; width: 50px; }
+    .log-level.info { color: var(--accent2); }
+    .log-level.warn { color: var(--yellow); }
+    .log-level.error { color: var(--red); }
+    .log-msg { color: var(--text); }
+
+    /* ─── 工具列表 ─────────────────────────────────── */
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .tool-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      transition: all 0.3s;
+    }
+
+    .tool-card:hover {
+      border-color: var(--accent2);
+      transform: translateY(-2px);
+    }
+
+    .tool-name {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--accent2);
+    }
+
+    .tool-desc { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+    .tool-perm {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 3px 10px;
+      background: var(--bg3);
+      border-radius: 10px;
+      font-size: 11px;
+      color: var(--yellow);
+    }
+
+    /* ─── 滚动条 ───────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+    /* ─── 响应式 ───────────────────────────────────── */
+    @media (max-width: 768px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- 顶栏 -->
+    <header class="header">
+      <div class="logo">🧬 EvoAgent</div>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <div class="status-badge">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Connecting...</span>
+        </div>
+        <span style="font-size:12px;color:var(--text-dim)" id="uptime">--</span>
+      </div>
+    </header>
+
+    <!-- 侧边栏 -->
+    <nav class="sidebar">
+      <div class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" data-page="chat">
+        <span class="nav-icon">💬</span> Chat
+      </div>
+      <div class="nav-item" data-page="tools">
+        <span class="nav-icon">🔧</span> Tools
+      </div>
+      <div class="nav-item" data-page="logs">
+        <span class="nav-icon">📋</span> Logs
+      </div>
+      <div class="nav-item" data-page="config">
+        <span class="nav-icon">⚙️</span> Config
+      </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <main class="main">
+      <!-- Dashboard 页 -->
+      <div class="page active" id="page-dashboard">
+        <h2 style="margin-bottom:20px;font-size:20px">📊 System Overview</h2>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Status</div>
+            <div class="stat-value" id="s-status" style="color:var(--green)">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Uptime</div>
+            <div class="stat-value" id="s-uptime">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Memory</div>
+            <div class="stat-value" id="s-memory">--<span class="stat-unit">MB</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Active Sessions</div>
+            <div class="stat-value" id="s-sessions">0</div>
+          </div>
+        </div>
+
+        <h3 style="margin:24px 0 16px;font-size:16px">🔌 Channels</h3>
+        <div class="stats-grid" id="channel-grid">
+          <div class="stat-card">
+            <div class="stat-label">CLI</div>
+            <div class="stat-value" style="color:var(--green)">●</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Web</div>
+            <div class="stat-value" style="color:var(--green)">●</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Feishu</div>
+            <div class="stat-value" style="color:var(--text-dim)">○</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">MCP</div>
+            <div class="stat-value" style="color:var(--text-dim)">○</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat 页 -->
+      <div class="page" id="page-chat">
+        <h2 style="margin-bottom:16px;font-size:20px">💬 Chat with EvoAgent</h2>
+        <div class="chat-container">
+          <div class="chat-messages" id="chatMessages">
+            <div class="message bot">
+              <div class="avatar">🧬</div>
+              <div class="bubble">Hello! I'm EvoAgent v0.1.0. My core modules are compiled and tested. How can I help you today?</div>
+            </div>
+          </div>
+          <div class="chat-input">
+            <input type="text" id="chatInput" placeholder="Type a message... (Enter to send)" />
+            <button id="sendBtn" onclick="sendMessage()">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tools 页 -->
+      <div class="page" id="page-tools">
+        <h2 style="margin-bottom:20px;font-size:20px">🔧 Available Tools</h2>
+        <div class="tool-grid" id="toolGrid">
+          <!-- 动态填充 -->
+        </div>
+      </div>
+
+      <!-- Logs 页 -->
+      <div class="page" id="page-logs">
+        <h2 style="margin-bottom:16px;font-size:20px">📋 System Logs</h2>
+        <div class="log-container" id="logContainer">
+          <div class="log-entry">
+            <span class="log-time">--:--:--</span>
+            <span class="log-level info">INFO</span>
+            <span class="log-msg">Dashboard loaded. Waiting for gateway connection...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Config 页 -->
+      <div class="page" id="page-config">
+        <h2 style="margin-bottom:20px;font-size:20px">⚙️ Configuration</h2>
+        <div class="stat-card">
+          <div class="stat-label">Model</div>
+          <div style="font-size:16px;margin:8px 0">claude-sonnet-4-20250514</div>
+          <div class="stat-label" style="margin-top:12px">Max Iterations</div>
+          <div style="font-size:16px;margin:8px 0">50</div>
+          <div class="stat-label" style="margin-top:12px">Permission Mode</div>
+          <div style="font-size:16px;margin:8px 0">default</div>
+          <div class="stat-label" style="margin-top:12px">Memory</div>
+          <div style="font-size:14px;margin:8px 0;color:var(--text-dim)">
+            Working: 4096 tokens<br>
+            Long-term: in-memory<br>
+            Skills: 3 presets loaded<br>
+            Episodic: sqlite mode
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API = window.location.origin + '/api';
+    let ws = null;
+    let logs = [];
+
+    // ─── 导航 ───────────────────────────────────────
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        item.classList.add('active');
+        document.getElementById('page-' + item.dataset.page).classList.add('active');
+      });
+    });
+
+    // ─── 状态轮询 ───────────────────────────────────
+    async function fetchStatus() {
+      try {
+        const r = await fetch(API + '/status');
+        const d = await r.json();
+        document.getElementById('s-status').textContent = d.status;
+        document.getElementById('s-uptime').textContent = fmtUptime(d.uptime);
+        document.getElementById('s-memory').innerHTML = (d.memory.heapUsed / 1024 / 1024).toFixed(1) + '<span class="stat-unit">MB</span>';
+        document.getElementById('s-sessions').textContent = d.activeSessions;
+        document.getElementById('uptime').textContent = 'uptime: ' + fmtUptime(d.uptime);
+        document.getElementById('statusDot').classList.remove('offline');
+        document.getElementById('statusText').textContent = 'Online';
+      } catch {
+        document.getElementById('statusDot').classList.add('offline');
+        document.getElementById('statusText').textContent = 'Offline';
+      }
+    }
+
+    function fmtUptime(s) {
+      if (s < 60) return s.toFixed(0) + 's';
+      if (s < 3600) return (s / 60).toFixed(0) + 'm';
+      return (s / 3600).toFixed(1) + 'h';
+    }
+
+    setInterval(fetchStatus, 5000);
+    fetchStatus();
+
+    // ─── WebSocket ───────────────────────────────────
+    function connectWS() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(proto + '//' + location.host);
+
+      ws.onopen = () => {
+        addLog('info', 'WebSocket connected');
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          addLog('info', 'WS message: ' + JSON.stringify(data));
+        } catch {
+          addLog('warn', 'WS raw: ' + e.data);
+        }
+      };
+
+      ws.onclose = () => {
+        addLog('warn', 'WebSocket disconnected. Reconnecting in 5s...');
+        setTimeout(connectWS, 5000);
+      };
+
+      ws.onerror = () => {
+        addLog('error', 'WebSocket error');
+      };
+    }
+    connectWS();
+
+    // ─── 聊天 ───────────────────────────────────────
+    const chatInput = document.getElementById('chatInput');
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+
+    async function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      chatInput.value = '';
+
+      // 显示用户消息
+      appendMessage('user', text);
+      addLog('info', 'Sent: ' + text);
+
+      try {
+        const r = await fetch(API + '/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        const d = await r.json();
+        appendMessage('bot', d.reply || '(no response)');
+      } catch (err) {
+        appendMessage('bot', 'Error: ' + err.message);
+        addLog('error', 'Chat error: ' + err.message);
+      }
+    }
+
+    function appendMessage(role, text) {
+      const container = document.getElementById('chatMessages');
+      const div = document.createElement('div');
+      div.className = 'message ' + role;
+      div.innerHTML = `
+        <div class="avatar">${role === 'user' ? '👤' : '🧬'}</div>
+        <div class="bubble">${escapeHtml(text)}</div>
+      `;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // ─── 日志 ───────────────────────────────────────
+    function addLog(level, msg) {
+      const now = new Date();
+      const time = now.toTimeString().slice(0, 8);
+      logs.push({ time, level, msg });
+      if (logs.length > 200) logs.shift();
+
+      const container = document.getElementById('logContainer');
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      div.innerHTML = `
+        <span class="log-time">${time}</span>
+        <span class="log-level ${level}">${level.toUpperCase()}</span>
+        <span class="log-msg">${escapeHtml(msg)}</span>
+      `;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // ─── 工具列表 ───────────────────────────────────
+    const tools = [
+      { name: 'bash', desc: 'Execute shell commands. File operations, running scripts, installing packages.', perm: 'execute' },
+      { name: 'file', desc: 'Read, write, edit, or delete files. Supports find-replace edits.', perm: 'write' },
+      { name: 'code', desc: 'Code analysis, refactoring, and generation. Structured code operations.', perm: 'execute' },
+      { name: 'web', desc: 'Search the web or fetch web page content.', perm: 'network' },
+      { name: 'mcp', desc: 'Call tools on external MCP servers. Extends EvoAgent capabilities.', perm: 'execute' },
+    ];
+
+    const toolGrid = document.getElementById('toolGrid');
+    tools.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'tool-card';
+      card.innerHTML = `
+        <div class="tool-name">⚡ ${t.name}</div>
+        <div class="tool-desc">${t.desc}</div>
+        <span class="tool-perm">🔒 ${t.perm}</span>
+      `;
+      toolGrid.appendChild(card);
+    });
+
+    addLog('info', 'Dashboard initialized');
+  </script>
+</body>
+</html>

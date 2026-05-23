@@ -1,0 +1,10 @@
+src/
+test/
+dist/test/
+tsconfig.json
+vitest.config.*
+.gitignore
+node_modules/
+*.log
+.env
+.evoagent/
