@@ -14,6 +14,7 @@ import { InteractiveCLI } from './interactive.js';
 import { runTask } from './single-task.js';
 import { startGateway } from '../gateway/server.js';
 import { showStatus } from './status.js';
+import { runSetup } from './setup.js';
 import { createAgent } from './create-agent.js';
 
 const program = new Command();
@@ -44,6 +45,11 @@ program
       tools: []
     }, parseInt(options.port));
   });
+
+program
+  .command('setup')
+  .description('Interactive setup wizard')
+  .action(async () => { await runSetup(); process.exit(0); });
 
 program
   .command('status')

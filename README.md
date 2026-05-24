@@ -144,20 +144,88 @@ const failoverLLM = new FailoverClient({
 
 ## 配置
 
+### 方式一：交互式向导（推荐）
+
+```bash
+evoagent setup
+```
+
+向导会引导你配置：
+1. **LLM 提供商** — provider、model、API key、base URL
+2. **飞书渠道** — App ID、App Secret、DM/群聊策略
+3. **记忆设置** — 长期记忆后端、事件存储、技能自动学习
+4. **权限模式** — default/bypass/plan/auto
+5. **高级选项** — 最大迭代次数、思考模式、日志级别
+
+配置保存到 `~/.evoagent/config.yaml`。
+
+### 方式二：环境变量
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export LONGCAT_API_KEY="..."
+export FEISHU_APP_ID="cli_xxx"
+export FEISHU_APP_SECRET="xxx"
+```
+
+### 方式三：代码配置
+
 ```typescript
-import { defaultConfig } from 'evoagent/core';
+import { createAgent } from 'evoagent/core';
 
-// 配置通过环境变量或代码修改
-process.env.LONGCAT_API_KEY = 'your-key';
-process.env.OPENAI_API_KEY = 'sk-...';
-
-// 或通过 createAgent 传入
 const agent = createAgent({
   model: 'gpt-4o',
   permissionMode: 'auto',
   maxIterations: 50,
   thinking: false,
+  fallbacks: [
+    { provider: 'openai', apiKey: 'sk-backup...', model: 'gpt-4o-mini' },
+  ],
 });
+```
+
+### 飞书配置说明
+
+1. 在 [飞书开放平台](https://open.feishu.cn/app) 创建自建应用
+2. 获取 App ID 和 App Secret
+3. 开启机器人能力
+4. 配置权限（im:message:receive_v1、im:message:send_as_bot 等）
+5. 发布应用
+
+```yaml
+# ~/.evoagent/config.yaml
+channels:
+  feishu:
+    enabled: true
+    appId: cli_xxxxxxxxxx
+    appSecret: xxxxxxxxxxxxxxxx
+    domain: feishu           # 国内飞书用 feishu，海外 Lark 用 lark
+    dmPolicy: pairing        # open/pairing/allowlist/disabled
+    groupPolicy: open        # open/allowlist/disabled
+    requireMention: true     # 群聊中是否需要 @机器人 才触发
+```
+
+### 记忆迁移
+
+从其他 Agent 系统导入记忆：
+
+```typescript
+import { MemoryImporter } from 'evoagent/importer';
+
+// 从 OpenClaw 工作区迁移
+await MemoryImporter.fromOpenClaw('~/.openclaw/workspace', agent.memory);
+
+// 从 mem0 迁移
+await MemoryImporter.fromMem0({ apiKey: '...', userId: '...' }, agent.memory);
+
+// 从 JSON 文件迁移
+await MemoryImporter.fromJSON('./memories.json', agent.memory);
+
+// 从 SQLite 迁移
+await MemoryImporter.fromSQLite('./old-agent.db', agent.memory);
+
+// 从 CSV 迁移
+await MemoryImporter.fromCSV('./memories.csv', agent.memory);
 ```
 
 ## 许可证
