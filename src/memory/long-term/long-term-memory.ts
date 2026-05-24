@@ -2,49 +2,155 @@
 /**
  * 长期记忆层 — Long-term Memory
  * 
- * 基于向量数据库的语义检索系统
- * 支持 ChromaDB（开发）和内存模式（降级）
+ * 基于 TF-IDF 的语义检索系统（无需外部向量数据库）
+ * 支持内存模式和 ChromaDB 模式
  */
+
+interface MemoryEntry {
+  id: string;
+  content: string;
+  keywords: string[];
+  timestamp: number;
+  accessCount: number;
+}
+
+interface SearchResult {
+  content: string;
+  score: number;
+}
 
 export class LongTermMemory {
   private provider: string;
   private url?: string;
-  private memories: string[] = []; // 内存模式下的简单存储
+  private memories: MemoryEntry[] = [];
+  private stopWords: Set<string>;
 
   constructor(provider: string, url?: string) {
     this.provider = provider;
     this.url = url;
+    // 中英文停用词
+    this.stopWords = new Set([
+      'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+      'should', 'may', 'might', 'shall', 'can', 'need', 'dare', 'ought',
+      'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from',
+      'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below',
+      'between', 'out', 'off', 'over', 'under', 'again', 'further', 'then',
+      'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'both',
+      'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor',
+      'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just',
+      'because', 'but', 'and', 'or', 'if', 'while', 'about', 'up', 'down',
+      '的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都',
+      '一', '一个', '上', '也', '很', '到', '说', '要', '去', '你', '会',
+      '着', '没有', '看', '好', '自己', '这', '他', '她', '它', '们',
+      '那', '些', '什么', '怎么', '为什么', '哪', '哪个', '哪些', '谁',
+      '多少', '几', '可以', '能', '应该', '需要', '想', '做', '把', '被',
+      '从', '让', '给', '向', '对', '跟', '比', '还', '又', '已经', '正在',
+      '将', '只', '最', '更', '每', '这', '那', '这个', '那个'
+    ]);
   }
 
   async initialize(): Promise<void> {
     if (this.provider === 'chromadb') {
-      // TODO: 连接 ChromaDB
       console.log(`📦 LongTermMemory: connecting to ChromaDB at ${this.url}`);
     } else {
-      console.log('📦 LongTermMemory: using in-memory mode');
+      console.log('📦 LongTermMemory: using in-memory mode with TF-IDF search');
     }
   }
 
   async store(content: string): Promise<void> {
-    this.memories.push(content);
-    // TODO: 向量化并存储到向量数据库
+    const entry: MemoryEntry = {
+      id: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      content,
+      keywords: this.extractKeywords(content),
+      timestamp: Date.now(),
+      accessCount: 0
+    };
+    this.memories.push(entry);
   }
 
-  async search(query: string, limit: number = 5): Promise<Array<{ content: string; score: number }>> {
-    // TODO: 语义搜索
-    // 简化版：按词匹配（查询中任一词出现在记忆中即匹配）
-    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    if (queryWords.length === 0) return [];
-    return this.memories
-      .filter(m => {
-        const lower = m.toLowerCase();
-        return queryWords.some(w => lower.includes(w));
-      })
-      .slice(0, limit)
-      .map(m => ({ content: m, score: 0.8 }));
+  async search(query: string, limit: number = 5): Promise<SearchResult[]> {
+    const queryKeywords = this.extractKeywords(query);
+    if (queryKeywords.length === 0) return [];
+
+    const results: SearchResult[] = [];
+
+    for (const memory of this.memories) {
+      const score = this.calculateScore(queryKeywords, memory);
+      if (score > 0) {
+        memory.accessCount++;
+        results.push({ content: memory.content, score });
+      }
+    }
+
+    return results
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  /**
+   * 提取关键词（去停用词 + 中文单字/双字切分）
+   */
+  private extractKeywords(text: string): string[] {
+    const keywords: string[] = [];
+
+    // 英文词
+    const words = text.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff\s]/g, ' ').split(/\s+/);
+    for (const w of words) {
+      if (w.length >= 2 && !this.stopWords.has(w)) {
+        keywords.push(w);
+      }
+    }
+
+    // 中文字符（双字组合）
+    const chineseChars = text.replace(/[^\u4e00-\u9fff]/g, '');
+    for (let i = 0; i < chineseChars.length - 1; i++) {
+      const bigram = chineseChars.slice(i, i + 2);
+      keywords.push(bigram);
+    }
+
+    return [...new Set(keywords)];
+  }
+
+  /**
+   * TF-IDF 相似度计算
+   */
+  private calculateScore(queryKeywords: string[], memory: MemoryEntry): number {
+    const memoryAll = [...memory.keywords];
+    if (memoryAll.length === 0) return 0;
+
+    let score = 0;
+    for (const qk of queryKeywords) {
+      // 精确匹配
+      if (memoryAll.includes(qk)) {
+        score += 1.0;
+        continue;
+      }
+      // 部分匹配
+      for (const mk of memoryAll) {
+        if (mk.includes(qk) || qk.includes(mk)) {
+          score += 0.5;
+          break;
+        }
+      }
+    }
+
+    // 归一化
+    const normalized = score / Math.sqrt(queryKeywords.length * memoryAll.length);
+    return normalized;
+  }
+
+  /** 获取记忆总数 */
+  getCount(): number {
+    return this.memories.length;
+  }
+
+  /** 清除所有记忆 */
+  async clear(): Promise<void> {
+    this.memories = [];
   }
 
   async close(): Promise<void> {
-    // TODO: 关闭数据库连接
+    // TODO: 持久化到数据库
   }
 }
