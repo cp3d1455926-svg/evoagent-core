@@ -68,7 +68,12 @@ export class ContextCompressor {
       result = this.removeDuplicates(result);
     }
 
-    // Layer 4: 紧急截断
+    // Layer 4: 如果仍然超过软阈值，强制缩减到阈值内
+    if (this.estimateTokens(result) > threshold) {
+      result = this.forceFit(result, threshold);
+    }
+
+    // Layer 5: 紧急截断（最后手段，确保不超硬限制）
     if (this.estimateTokens(result) > this.config.maxTokens) {
       result = this.emergencyTruncate(result);
     }
@@ -104,40 +109,49 @@ export class ContextCompressor {
 
   /**
    * Layer 2: 摘要早期对话
-   * 保留 system 消息 + 摘要 + 最近 N 条用户/助手消息
+   * 保留 system 消息 + 紧凑摘要 + 最近 N 条用户/助手消息
+   * 如果摘要后仍超阈值，递归压缩
    */
   private summarizeEarlyConversation(messages: LLMMessage[]): LLMMessage[] {
     const systemMessages = messages.filter(m => m.role === 'system');
     const nonSystem = messages.filter(m => m.role !== 'system');
-    const recentCount = 10;
-    const recentMessages = nonSystem.slice(-recentCount);
-    const olderMessages = nonSystem.slice(0, -recentCount);
+    const threshold = this.config.maxTokens * this.config.softThreshold;
 
-    if (olderMessages.length === 0) return messages;
-    // 生成简单摘要：提取关键信息
-    const summary = this.generateSummary(olderMessages);
-    const summaryMsg: LLMMessage = {
-      role: 'system',
-      content: `[对话摘要] ${summary}`
-    };
-    return [...systemMessages, summaryMsg, ...recentMessages];
+    // 逐步减少保留的最近消息数，直到满足阈值
+    for (let recentCount = 10; recentCount >= 1; recentCount--) {
+      const recentMessages = nonSystem.slice(-recentCount);
+      const olderMessages = nonSystem.slice(0, -recentCount);
+
+      if (olderMessages.length === 0) return messages;
+
+      // 生成紧凑摘要
+      const summary = this.generateCompactSummary(olderMessages);
+      const summaryMsg: LLMMessage = {
+        role: 'system',
+        content: summary
+      };
+      const candidate = [...systemMessages, summaryMsg, ...recentMessages];
+
+      if (this.estimateTokens(candidate) <= threshold) {
+        return candidate;
+      }
+    }
+
+    // 最坏情况：只保留 system + 最后 1 条
+    const lastMsg = nonSystem.slice(-1);
+    return [...systemMessages, ...lastMsg];
   }
 
   /**
-   * 生成消息摘要（基于提取的启发式方法）
-   * 生产环境应使用 LLM 生成摘要
+   * 生成紧凑摘要 — 只保留关键信息，严格控制长度
    */
-  private generateSummary(messages: LLMMessage[]): string {
-    const parts: string[] = [];
-    for (const m of messages) {
-      const content = m.content?.slice(0, 200) ?? '';
-      if (m.role === 'user') {
-        parts.push(`用户: ${content}`);
-      } else if (m.role === 'assistant') {
-        parts.push(`助手: ${content}`);
-      }
-    }
-    return parts.join(' | ');
+  private generateCompactSummary(messages: LLMMessage[]): string {
+    const userMessages = messages.filter(m => m.role === 'user');
+    const assistantMessages = messages.filter(m => m.role === 'assistant');
+    const count = messages.length;
+    // 极度紧凑：只报告数量和最后一条用户消息
+    const lastUser = userMessages[userMessages.length - 1]?.content?.slice(0, 50) ?? '';
+    return `[压缩: ${count}条历史消息 | 最近用户: ${lastUser}]`;
   }
 
   /**
@@ -154,7 +168,24 @@ export class ContextCompressor {
   }
 
   /**
-   * Layer 4: 紧急截断（保留 system + 最近 5 条）
+   * Layer 4: 强制缩减到阈值内
+   * 逐步减少保留的消息数直到满足阈值
+   */
+  private forceFit(messages: LLMMessage[], threshold: number): LLMMessage[] {
+    const systemMessages = messages.filter(m => m.role === 'system');
+    const nonSystem = messages.filter(m => m.role !== 'system');
+
+    for (let keep = nonSystem.length; keep >= 1; keep--) {
+      const candidate = [...systemMessages, ...nonSystem.slice(-keep)];
+      if (this.estimateTokens(candidate) <= threshold) {
+        return candidate;
+      }
+    }
+    return systemMessages;
+  }
+
+  /**
+   * Layer 5: 紧急截断（保留 system + 最近 5 条）
    */
   private emergencyTruncate(messages: LLMMessage[]): LLMMessage[] {
     const systemMessages = messages.filter(m => m.role === 'system');
