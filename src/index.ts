@@ -7,6 +7,8 @@ export { FailoverClient } from './core/llm-client.js';
 export type { FailoverConfig } from './core/llm-client.js';
 export { EvoMCPServer } from './mcp/server/mcp-server.js';
 export type { MCPServerConfig } from './mcp/server/mcp-server.js';
+export { MemoryImporter } from './importer/index.js';
+export type { ImportOptions, ImportResult } from './importer/index.js';
 export { ContextCompressor } from './core/context-compressor.js';
 export { DefaultPermissionSystem } from './core/permission.js';
 export { AnthropicClient, OpenAIClient, createLLMClient } from './core/llm-client.js';
