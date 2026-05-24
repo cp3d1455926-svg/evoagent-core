@@ -22,7 +22,7 @@ const program = new Command();
 program
   .name('evoagent')
   .description('EvoAgent — 融合 OpenClaw + Hermes + Claude Code 的 AI Agent')
-  .version('0.1.0');
+  .version('0.2.0');
 
 program
   .option('-p, --prompt <task>', '单次任务模式')
@@ -65,7 +65,7 @@ program
 
 // 解析参数
 const opts = program.opts();
-const hasSubcommand = process.argv.slice(2).some(a => ['gateway', 'status', 'plugins'].includes(a));
+const hasSubcommand = process.argv.slice(2).some(a => ['gateway', 'setup', 'status', 'plugins'].includes(a));
 
 if (!hasSubcommand) {
   if (opts.prompt) {
