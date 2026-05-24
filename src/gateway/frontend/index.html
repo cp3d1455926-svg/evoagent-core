@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EvoAgent 控制台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1117; --bg-surface: #161b22; --bg-elevated: #21262d;
+      --bg-hover: #30363d; --border: #30363d; --border-light: #484f58;
+      --text: #e6edf3; --text-secondary: #8b949e; --text-muted: #6e7681;
+      --primary: #58a6ff; --primary-dim: #1f6feb;
+      --success: #3fb950; --warning: #d29922; --danger: #f85149;
+      --purple: #bc8cff; --cyan: #39c5cf; --orange: #f0883e;
+      --radius: 8px; --radius-lg: 12px;
+      --shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: 'Inter', -apple-system, 'Noto Sans SC', sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+    .layout { display:grid; grid-template-columns:240px 1fr; grid-template-rows:60px 1fr; height:100vh; overflow:hidden; }
+    .topbar { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; padding:0 24px; background:var(--bg-surface); border-bottom:1px solid var(--border); z-index:10; }
+    .brand { display:flex; align-items:center; gap:10px; font-size:18px; font-weight:700; }
+    .brand-icon { width:32px; height:32px; background:linear-gradient(135deg,var(--primary),var(--purple)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff; }
+    .brand small { font-size:11px; font-weight:500; color:var(--text-muted); background:var(--bg-elevated); padding:2px 8px; border-radius:10px; margin-left:4px; }
+    .topbar-right { display:flex; align-items:center; gap:16px; }
+    .status-pill { display:flex; align-items:center; gap:8px; padding:6px 14px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:20px; font-size:13px; color:var(--text-secondary); }
+    .dot { width:8px; height:8px; border-radius:50%; background:var(--text-muted); }
+    .dot.online { background:var(--success); box-shadow:0 0 8px rgba(63,185,80,0.4); }
+    .dot.offline { background:var(--danger); }
+    .sidebar { background:var(--bg-surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
+    .sidebar-section { padding:16px 12px 8px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:10px 14px; margin:2px 8px; border-radius:var(--radius); cursor:pointer; transition:all 0.15s; font-size:14px; color:var(--text-secondary); border:1px solid transparent; }
+    .nav-item:hover { background:var(--bg-hover); color:var(--text); }
+    .nav-item.active { background:rgba(88,166,255,0.08); color:var(--primary); border-color:rgba(88,166,255,0.15); }
+    .nav-item .icon { width:20px; text-align:center; font-size:16px; }
+    .nav-badge { margin-left:auto; font-size:11px; padding:1px 7px; background:var(--bg-elevated); border-radius:10px; color:var(--text-muted); }
+    .sidebar-footer { margin-top:auto; padding:16px; border-top:1px solid var(--border); font-size:12px; color:var(--text-muted); text-align:center; }
+    .content { overflow-y:auto; padding:28px 32px; background:var(--bg); }
+    .page { display:none; } .page.active { display:block; }
+    .page-header { margin-bottom:28px; }
+    .page-header h1 { font-size:24px; font-weight:700; letter-spacing:-0.5px; margin-bottom:6px; }
+    .page-header p { font-size:14px; color:var(--text-secondary); }
+    .card { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+    .card-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); }
+    .card-title { font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .card-body { padding:20px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:24px; }
+    .stat { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; position:relative; overflow:hidden; }
+    .stat::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+    .stat.blue::before { background:var(--primary); }
+    .stat.green::before { background:var(--success); }
+    .stat.purple::before { background:var(--purple); }
+    .stat.orange::before { background:var(--orange); }
+    .stat.cyan::before { background:var(--cyan); }
+    .stat-label { font-size:12px; color:var(--text-muted); margin-bottom:8px; font-weight:500; }
+    .stat-value { font-size:28px; font-weight:700; letter-spacing:-1px; line-height:1; }
+    .stat-unit { font-size:14px; font-weight:400; color:var(--text-secondary); margin-left:2px; }
+    .chat-layout { display:grid; grid-template-columns:1fr 300px; gap:20px; height:calc(100vh - 180px); }
+    .chat-main { display:flex; flex-direction:column; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+    .chat-messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px; }
+    .msg { display:flex; gap:12px; max-width:85%; animation:fadeUp 0.25s ease; }
+    .msg.user { align-self:flex-end; flex-direction:row-reverse; }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .msg-avatar { width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; flex-shrink:0; border:2px solid var(--border); }
+    .msg.user .msg-avatar { background:var(--primary-dim); border-color:var(--primary); color:#fff; }
+    .msg.bot .msg-avatar { background:rgba(188,140,255,0.15); border-color:var(--purple); color:var(--purple); }
+    .msg-bubble { padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.65; white-space:pre-wrap; word-break:break-word; }
+    .msg.user .msg-bubble { background:var(--primary-dim); color:#fff; border-bottom-right-radius:4px; }
+    .msg.bot .msg-bubble { background:var(--bg-elevated); border:1px solid var(--border); border-bottom-left-radius:4px; }
+    .msg-time { font-size:11px; color:var(--text-muted); margin-top:4px; }
+    .chat-input-area { display:flex; gap:12px; padding:16px 20px; background:var(--bg-elevated); border-top:1px solid var(--border); }
+    .chat-input-area input { flex:1; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:12px 16px; color:var(--text); font-size:14px; font-family:inherit; outline:none; transition:border-color 0.15s; }
+    .chat-input-area input:focus { border-color:var(--primary); }
+    .btn { display:inline-flex; align-items:center; gap:6px; padding:10px 20px; border-radius:var(--radius); font-size:14px; font-weight:500; font-family:inherit; cursor:pointer; transition:all 0.15s; border:1px solid transparent; }
+    .btn-primary { background:var(--primary-dim); color:#fff; }
+    .btn-primary:hover { background:#1a5fd4; }
+    .btn-ghost { background:transparent; color:var(--text-secondary); border-color:var(--border); }
+    .btn-ghost:hover { background:var(--bg-hover); color:var(--text); }
+    .chat-sidebar { display:flex; flex-direction:column; gap:16px; }
+    .session-info { font-size:13px; color:var(--text-secondary); line-height:1.8; }
+    .session-info strong { color:var(--text); }
+    .tools-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+    .tool-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; transition:all 0.2s; }
+    .tool-card:hover { border-color:var(--border-light); box-shadow:var(--shadow); }
+    .tool-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .tool-name { font-size:15px; font-weight:600; font-family:'JetBrains Mono',monospace; color:var(--cyan); }
+    .tool-perm { font-size:11px; padding:2px 8px; border-radius:10px; background:rgba(240,136,62,0.1); color:var(--orange); font-weight:500; }
+    .tool-desc { font-size:13px; color:var(--text-secondary); line-height:1.6; }
+    .log-panel { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+    .log-header { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; border-bottom:1px solid var(--border); }
+    .log-body { height:500px; overflow-y:auto; padding:12px 0; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:2; }
+    .log-line { display:flex; gap:12px; padding:2px 20px; border-bottom:1px solid rgba(255,255,255,0.02); }
+    .log-line:hover { background:rgba(255,255,255,0.02); }
+    .log-ts { color:var(--text-muted); flex-shrink:0; width:70px; }
+    .log-level { flex-shrink:0; width:48px; font-weight:600; font-size:11px; }
+    .log-level.info { color:var(--primary); } .log-level.warn { color:var(--warning); } .log-level.error { color:var(--danger); }
+    .log-text { color:var(--text-secondary); word-break:break-all; }
+    .config-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(350px,1fr)); gap:20px; }
+    .config-section { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+    .config-section-header { padding:16px 20px; border-bottom:1px solid var(--border); font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .config-rows { padding:8px 0; }
+    .config-row { display:flex; justify-content:space-between; align-items:center; padding:10px 20px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.03); }
+    .config-row:last-child { border-bottom:none; }
+    .config-key { color:var(--text-secondary); }
+    .config-val { color:var(--text); font-family:'JetBrains Mono',monospace; font-size:12px; background:var(--bg-elevated); padding:3px 8px; border-radius:4px; }
+    .empty { text-align:center; padding:60px 20px; color:var(--text-muted); }
+    .empty-icon { font-size:48px; margin-bottom:16px; } .empty-text { font-size:14px; }
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--border-light); }
+    @media(max-width:900px) { .layout { grid-template-columns:1fr; } .sidebar { display:none; } .chat-layout { grid-template-columns:1fr; } .chat-sidebar { display:none; } .content { padding:20px 16px; } }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon">E</div>
+      EvoAgent <small>v0.2.0</small>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill">
+        <div class="dot" id="connDot"></div>
+        <span id="connText">连接中...</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="sidebar">
+    <div class="sidebar-section">主菜单</div>
+    <div class="nav-item active" data-page="overview"><span class="icon">📊</span> 总览</div>
+    <div class="nav-item" data-page="chat"><span class="icon">💬</span> 对话</div>
+    <div class="nav-item" data-page="tools"><span class="icon">🔧</span> 工具<span class="nav-badge">6</span></div>
+    <div class="nav-item" data-page="memory"><span class="icon">🧠</span> 记忆</div>
+    <div class="nav-item" data-page="logs"><span class="icon">📋</span> 日志</div>
+    <div class="sidebar-section">系统</div>
+    <div class="nav-item" data-page="config"><span class="icon">⚙️</span> 配置</div>
+    <div class="nav-item" data-page="sessions"><span class="icon">🔗</span> 会话<span class="nav-badge" id="sessionCount">0</span></div>
+    <div class="sidebar-footer">EvoAgent v0.2.0 · MIT</div>
+  </nav>
+
+  <main class="content">
+    <!-- 总览 -->
+    <div class="page active" id="page-overview">
+      <div class="page-header"><h1>系统总览</h1><p>EvoAgent 运行状态和关键指标</p></div>
+      <div class="stats">
+        <div class="stat blue"><div class="stat-label">运行状态</div><div class="stat-value" id="s-status">--</div></div>
+        <div class="stat green"><div class="stat-label">运行时间</div><div class="stat-value" id="s-uptime">--</div></div>
+        <div class="stat purple"><div class="stat-label">堆内存</div><div class="stat-value" id="s-heap">--<span class="stat-unit">MB</span></div></div>
+        <div class="stat orange"><div class="stat-label">活跃会话</div><div class="stat-value" id="s-sessions">0</div></div>
+        <div class="stat cyan"><div class="stat-label">渠道数</div><div class="stat-value">4</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">📡 渠道状态</div></div>
+        <div class="card-body">
+          <div class="stats">
+            <div class="stat blue"><div class="stat-label">CLI</div><div class="stat-value" style="font-size:16px;color:var(--success)">● 在线</div></div>
+            <div class="stat green"><div class="stat-label">Web</div><div class="stat-value" style="font-size:16px;color:var(--success)">● 在线</div></div>
+            <div class="stat purple"><div class="stat-label">飞书</div><div class="stat-value" style="font-size:16px;color:var(--text-muted)">○ 未配置</div></div>
+            <div class="stat orange"><div class="stat-label">MCP</div><div class="stat-value" style="font-size:16px;color:var(--text-muted)">○ 未启用</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 对话 -->
+    <div class="page" id="page-chat">
+      <div class="page-header"><h1>对话</h1><p>与 EvoAgent 实时交互</p></div>
+      <div class="chat-layout">
+        <div class="chat-main">
+          <div class="chat-messages" id="chatMsgs">
+            <div class="msg bot">
+              <div class="msg-avatar">E</div>
+              <div>
+                <div class="msg-bubble">你好！我是 EvoAgent v0.2.0。所有核心模块已编译并通过测试。有什么可以帮你的？</div>
+                <div class="msg-time" id="welcomeTime"></div>
+              </div>
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="输入消息... (回车发送)" />
+            <button class="btn btn-primary" id="sendBtn" onclick="sendMsg()">发送</button>
+          </div>
+        </div>
+        <div class="chat-sidebar">
+          <div class="card">
+            <div class="card-header"><div class="card-title">会话信息</div></div>
+            <div class="card-body">
+              <div class="session-info">
+                <div><strong>会话 ID</strong></div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted)">web-default</div>
+                <div style="margin-top:12px"><strong>消息数</strong></div>
+                <div id="msgCount">1</div>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="clearChat()">清空对话</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 工具 -->
+    <div class="page" id="page-tools">
+      <div class="page-header"><h1>工具</h1><p>EvoAgent 内置的 6 种工具</p></div>
+      <div class="tools-grid">
+        <div class="tool-card"><div class="tool-head"><span class="tool-name">bash</span><span class="tool-perm">执行</span></div><div class="tool-desc">执行 Shell 命令。文件操作、运行脚本、安装包、编译代码等。支持超时和输出截断。</div></div>
+        <div class="tool-card"><div class="tool-head"><span class="tool-name">file</span><span class="tool-perm">写入</span></div><div class="tool-desc">读取、写入、编辑、删除文件。支持查找替换编辑模式。</div></div>
+        <div class="tool-card"><div class="tool-head"><span class="tool-name">code</span><span class="tool-perm">执行</span></div><div class="tool-desc">代码分析、重构、生成和检测。自动语言检测、函数/类统计、问题扫描。</div></div>
+        <div class="tool-card"><div class="tool-head"><span class="tool-name">web</span><span class="tool-perm">网络</span></div><div class="tool-desc">DuckDuckGo 网页搜索和抓取。HTML 自动转文本，超时降级。</div></div>
+        <div class="tool-card"><div class="tool-head"><span class="tool-name">git</span><span class="tool-perm">写入</span></div><div class="tool-desc">Git 版本控制。status、log、diff、add、commit、push、pull、branch。</div></div>
+        <div class="tool-card"><div class="tool-head"><span class="tool-name">mcp</span><span class="tool-perm">执行</span></div><div class="tool-desc">调用外部 MCP 服务器的工具，扩展 EvoAgent 的能力边界。</div></div>
+      </div>
+    </div>
+
+    <!-- 记忆 -->
+    <div class="page" id="page-memory">
+      <div class="page-header"><h1>记忆</h1><p>EvoAgent 四层记忆系统</p></div>
+      <div class="stats">
+        <div class="stat blue"><div class="stat-label">长期记忆</div><div class="stat-value" id="mem-longterm">0</div></div>
+        <div class="stat green"><div class="stat-label">事件记忆</div><div class="stat-value" id="mem-episodic">0</div></div>
+        <div class="stat purple"><div class="stat-label">技能模板</div><div class="stat-value" id="mem-skills">3</div></div>
+        <div class="stat orange"><div class="stat-label">工作记忆</div><div class="stat-value" id="mem-working">0</div></div>
+      </div>
+      <div class="card" style="margin-top:20px">
+        <div class="card-header"><div class="card-title">📝 最近事件</div></div>
+        <div class="card-body" id="recentEvents"><div class="empty"><div class="empty-icon">📭</div><div class="empty-text">暂无事件记录</div></div></div>
+      </div>
+    </div>
+
+    <!-- 日志 -->
+    <div class="page" id="page-logs">
+      <div class="page-header"><h1>日志</h1><p>系统运行日志</p></div>
+      <div class="log-panel">
+        <div class="log-header"><div class="card-title">📋 实时日志</div><button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="clearLogs()">清空</button></div>
+        <div class="log-body" id="logBody"><div class="log-line"><span class="log-ts">--:--:--</span><span class="log-level info">INFO</span><span class="log-text">控制台已加载，等待网关连接...</span></div></div>
+      </div>
+    </div>
+
+    <!-- 配置 -->
+    <div class="page" id="page-config">
+      <div class="page-header"><h1>配置</h1><p>EvoAgent 当前配置信息</p></div>
+      <div class="config-grid">
+        <div class="config-section">
+          <div class="config-section-header">🤖 大语言模型</div>
+          <div class="config-rows">
+            <div class="config-row"><span class="config-key">提供商</span><span class="config-val" id="cfg-provider">openai</span></div>
+            <div class="config-row"><span class="config-key">模型</span><span class="config-val" id="cfg-model">gpt-4o</span></div>
+            <div class="config-row"><span class="config-key">最大迭代</span><span class="config-val">50</span></div>
+            <div class="config-row"><span class="config-key">思考模式</span><span class="config-val">关闭</span></div>
+          </div>
+        </div>
+        <div class="config-section">
+          <div class="config-section-header">🧠 记忆系统</div>
+          <div class="config-rows">
+            <div class="config-row"><span class="config-key">长期记忆</span><span class="config-val">TF-IDF 内存检索</span></div>
+            <div class="config-row"><span class="config-key">事件记忆</span><span class="config-val">SQLite 持久化</span></div>
+            <div class="config-row"><span class="config-key">技能学习</span><span class="config-val">自动</span></div>
+            <div class="config-row"><span class="config-key">工作窗口</span><span class="config-val">4096 tokens</span></div>
+          </div>
+        </div>
+        <div class="config-section">
+          <div class="config-section-header">🔐 权限</div>
+          <div class="config-rows">
+            <div class="config-row"><span class="config-key">默认模式</span><span class="config-val">默认</span></div>
+            <div class="config-row"><span class="config-key">重试次数</span><span class="config-val">3</span></div>
+            <div class="config-row"><span class="config-key">沙箱</span><span class="config-val">关闭</span></div>
+          </div>
+        </div>
+        <div class="config-section">
+          <div class="config-section-header">🌐 渠道</div>
+          <div class="config-rows">
+            <div class="config-row"><span class="config-key">CLI</span><span class="config-val" style="color:var(--success)">启用</span></div>
+            <div class="config-row"><span class="config-key">Web</span><span class="config-val">关闭</span></div>
+            <div class="config-row"><span class="config-key">飞书</span><span class="config-val">关闭</span></div>
+            <div class="config-row"><span class="config-key">MCP</span><span class="config-val">关闭</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 会话 -->
+    <div class="page" id="page-sessions">
+      <div class="page-header"><h1>会话</h1><p>活跃的 Agent 会话</p></div>
+      <div class="card"><div class="card-body" id="sessionsList"><div class="empty"><div class="empty-icon">🔗</div><div class="empty-text">暂无活跃会话</div></div></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const API = window.location.origin + '/api';
+let logs = [], msgCount = 1;
+
+// 导航
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById('page-' + item.dataset.page).classList.add('active');
+  });
+});
+
+// 状态轮询
+async function pollStatus() {
+  try {
+    const r = await fetch(API + '/status');
+    const d = await r.json();
+    document.getElementById('s-status').textContent = d.status;
+    document.getElementById('s-uptime').textContent = fmtTime(d.uptime);
+    document.getElementById('s-heap').innerHTML = (d.memory.heapUsed / 1024 / 1024).toFixed(1) + '<span class="stat-unit">MB</span>';
+    document.getElementById('s-sessions').textContent = d.activeSessions || 0;
+    document.getElementById('sessionCount').textContent = d.activeSessions || 0;
+    document.getElementById('connDot').classList.add('online');
+    document.getElementById('connDot').classList.remove('offline');
+    document.getElementById('connText').textContent = '在线';
+  } catch {
+    document.getElementById('connDot').classList.remove('online');
+    document.getElementById('connDot').classList.add('offline');
+    document.getElementById('connText').textContent = '离线';
+    document.getElementById('s-status').textContent = '离线';
+  }
+}
+function fmtTime(s) { if(s<60)return s.toFixed(0)+'秒'; if(s<3600)return(s/60).toFixed(0)+'分'; return(s/3600).toFixed(1)+'时'; }
+setInterval(pollStatus, 5000); pollStatus();
+
+// WebSocket
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(proto + '//' + location.host);
+  ws.onopen = () => addLog('info', 'WebSocket 已连接');
+  ws.onmessage = (e) => { try { const d = JSON.parse(e.data); addLog('info', '收到: ' + JSON.stringify(d).slice(0,100)); } catch { addLog('warn', '原始数据: ' + e.data.slice(0,100)); } };
+  ws.onclose = () => { addLog('warn', 'WebSocket 断开，5秒后重连...'); setTimeout(connectWS, 5000); };
+  ws.onerror = () => addLog('error', 'WebSocket 错误');
+}
+connectWS();
+
+// 聊天
+document.getElementById('chatInput').addEventListener('keydown', (e) => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} });
+document.getElementById('welcomeTime').textContent = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+
+async function sendMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if(!text) return;
+  input.value = '';
+  appendMsg('user', text);
+  addLog('info', '发送: ' + text);
+  try {
+    const r = await fetch(API + '/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text}) });
+    const d = await r.json();
+    appendMsg('bot', d.reply || '(无回复)');
+  } catch(err) { appendMsg('bot', '错误: ' + err.message); addLog('error', '聊天错误: ' + err.message); }
+}
+
+function appendMsg(role, text) {
+  const c = document.getElementById('chatMsgs');
+  const d = document.createElement('div');
+  d.className = 'msg ' + role;
+  const avatar = role === 'user' ? '👤' : 'E';
+  const time = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+  d.innerHTML = '<div class="msg-avatar">' + avatar + '</div><div><div class="msg-bubble">' + esc(text) + '</div><div class="msg-time">' + time + '</div></div>';
+  c.appendChild(d);
+  c.scrollTop = c.scrollHeight;
+  msgCount++;
+  document.getElementById('msgCount').textContent = msgCount;
+}
+
+function clearChat() { document.getElementById('chatMsgs').innerHTML = ''; msgCount = 0; document.getElementById('msgCount').textContent = 0; }
+
+// 日志
+function addLog(level, msg) {
+  const now = new Date();
+  const ts = now.toTimeString().slice(0,8);
+  logs.push({ts, level, msg});
+  if(logs.length > 300) logs.shift();
+  const c = document.getElementById('logBody');
+  const d = document.createElement('div');
+  d.className = 'log-line';
+  d.innerHTML = '<span class="log-ts">' + ts + '</span><span class="log-level ' + level + '">' + level.toUpperCase() + '</span><span class="log-text">' + esc(msg) + '</span>';
+  c.appendChild(d);
+  c.scrollTop = c.scrollHeight;
+}
+function clearLogs() { document.getElementById('logBody').innerHTML = ''; logs = []; }
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+addLog('info', '控制台初始化完成');
+</script>
+</body>
+</html>

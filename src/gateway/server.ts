@@ -102,7 +102,15 @@ export async function startGateway(
   // ─── 静态文件（仪表台前端） ──────────────────────────
   // Serve frontend
   const frontendPath = join(__dirname, 'frontend');
-  app.use(express.static(frontendPath));
+  if (existsSync(frontendPath)) {
+    app.use(express.static(frontendPath));
+  } else {
+    // Fallback for dev: serve from src
+    const devPath = join(__dirname, '..', 'gateway', 'frontend');
+    if (existsSync(devPath)) {
+      app.use(express.static(devPath));
+    }
+  }
 
   // ─── REST API ────────────────────────────────────────
 
