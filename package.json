@@ -1,6 +1,6 @@
 {
   "name": "evoagent-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "EvoAgent — 融合 OpenClaw 架构、Hermes 记忆系统与 Claude Code 代码能力的 AI Agent",
   "type": "module",
   "main": "dist/index.js",
