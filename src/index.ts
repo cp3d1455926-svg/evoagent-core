@@ -1,6 +1,8 @@
 // EvoAgent — 核心导出
 
 export { AgentLoop } from './core/agent-loop.js';
+export { createAgent } from './cli/create-agent.js';
+export type { GatewayContext } from './gateway/server.js';
 export { ContextCompressor } from './core/context-compressor.js';
 export { DefaultPermissionSystem } from './core/permission.js';
 export { AnthropicClient, OpenAIClient, createLLMClient } from './core/llm-client.js';

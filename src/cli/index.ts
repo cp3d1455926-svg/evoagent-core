@@ -14,6 +14,7 @@ import { InteractiveCLI } from './interactive.js';
 import { runTask } from './single-task.js';
 import { startGateway } from '../gateway/server.js';
 import { showStatus } from './status.js';
+import { createAgent } from './create-agent.js';
 
 const program = new Command();
 
@@ -26,14 +27,22 @@ program
   .option('-p, --prompt <task>', '单次任务模式')
   .option('-c, --channel <channel>', '指定渠道 (cli/feishu/mcp/web)', 'cli')
   .option('--thinking', '启用思考模式')
-  .option('--model <model>', '指定模型', 'claude-sonnet-4-20250514');
+  .option('--model <model>', '指定模型', 'LongCat-2.0-Preview');
 
 program
   .command('gateway')
   .description('启动网关 + Web 仪表台')
   .option('--port <port>', '端口号', '3000')
   .action(async (options) => {
-    await startGateway(parseInt(options.port));
+    const agent = createAgent({
+      model: program.opts().model,
+      thinking: program.opts().thinking
+    });
+    await startGateway({
+      agentLoop: agent,
+      systemPrompt: 'You are EvoAgent, a helpful AI assistant. Be concise and accurate.',
+      tools: []
+    }, parseInt(options.port));
   });
 
 program
@@ -48,16 +57,20 @@ program
     console.log('🔌 Plugin management - coming soon');
   });
 
-program.parseAsync(process.argv).catch(err => {
-  console.error('Error:', err);
-  process.exit(1);
-});
-
-// 如果没有子命令，进入交互模式或单次任务
+// 解析参数
 const opts = program.opts();
-if (opts.prompt) {
-  await runTask(opts.prompt, opts);
-} else if (!process.argv.slice(2).some(a => ['gateway', 'status', 'plugins'].includes(a))) {
-  const cli = new InteractiveCLI(opts);
-  await cli.start();
+const hasSubcommand = process.argv.slice(2).some(a => ['gateway', 'status', 'plugins'].includes(a));
+
+if (!hasSubcommand) {
+  if (opts.prompt) {
+    await runTask(opts.prompt, opts);
+  } else {
+    const cli = new InteractiveCLI(opts);
+    await cli.start();
+  }
+} else {
+  program.parseAsync(process.argv).catch(err => {
+    console.error('Error:', err);
+    process.exit(1);
+  });
 }

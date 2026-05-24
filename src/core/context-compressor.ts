@@ -103,22 +103,41 @@ export class ContextCompressor {
   }
 
   /**
-   * Layer 2: 摘要早期对话（保留最近 N 条）
+   * Layer 2: 摘要早期对话
+   * 保留 system 消息 + 摘要 + 最近 N 条用户/助手消息
    */
   private summarizeEarlyConversation(messages: LLMMessage[]): LLMMessage[] {
-    // 保留 system 消息 + 最近 10 条
     const systemMessages = messages.filter(m => m.role === 'system');
-    const recentMessages = messages.filter(m => m.role !== 'system').slice(-10);
+    const nonSystem = messages.filter(m => m.role !== 'system');
+    const recentCount = 10;
+    const recentMessages = nonSystem.slice(-recentCount);
+    const olderMessages = nonSystem.slice(0, -recentCount);
 
-    if (systemMessages.length + recentMessages.length < messages.length) {
-      const summary: LLMMessage = {
-        role: 'system',
-        content: `[Context compressed: ${messages.length - systemMessages.length - recentMessages.length} earlier messages summarized]`
-      };
-      return [...systemMessages, summary, ...recentMessages];
+    if (olderMessages.length === 0) return messages;
+    // 生成简单摘要：提取关键信息
+    const summary = this.generateSummary(olderMessages);
+    const summaryMsg: LLMMessage = {
+      role: 'system',
+      content: `[对话摘要] ${summary}`
+    };
+    return [...systemMessages, summaryMsg, ...recentMessages];
+  }
+
+  /**
+   * 生成消息摘要（基于提取的启发式方法）
+   * 生产环境应使用 LLM 生成摘要
+   */
+  private generateSummary(messages: LLMMessage[]): string {
+    const parts: string[] = [];
+    for (const m of messages) {
+      const content = m.content?.slice(0, 200) ?? '';
+      if (m.role === 'user') {
+        parts.push(`用户: ${content}`);
+      } else if (m.role === 'assistant') {
+        parts.push(`助手: ${content}`);
+      }
     }
-
-    return messages;
+    return parts.join(' | ');
   }
 
   /**

@@ -70,14 +70,14 @@ export class DefaultPermissionSystem implements PermissionSystem {
         return this.riskScore(toolName) < 0.7;
 
       case 'default':
-      default:
+      default: {
         // 默认：写入和网络需确认
         const writeTools = ['bash', 'write', 'edit', 'delete', 'deploy'];
         if (writeTools.includes(toolName.toLowerCase())) {
-          // TODO: 实现用户确认流程
-          return true; // 暂时放行，实际应等待确认
+          return this.promptApproval(toolName);
         }
         return true;
+      }
     }
   }
 
@@ -87,6 +87,19 @@ export class DefaultPermissionSystem implements PermissionSystem {
 
   setMode(mode: PermissionMode): void {
     this.config.mode = mode;
+  }
+
+  /**
+   * 请求用户审批（简化版：自动批准，实际应接入渠道交互）
+   * 生产环境应通过 WebSocket/消息渠道等待用户回复
+   */
+  private async promptApproval(toolName: string): Promise<boolean> {
+    // TODO: 接入实际审批流程
+    // 1. 通过渠道发送审批请求
+    // 2. 等待用户回复
+    // 3. 返回审批结果
+    console.warn(`⚠️  Tool '${toolName}' requires approval in default mode (auto-approved for now)`);
+    return true;
   }
 
   private riskScore(toolName: string): number {

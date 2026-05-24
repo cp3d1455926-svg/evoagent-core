@@ -5,7 +5,8 @@
  * 终端交互式会话，支持多行输入、历史记录
  */
 
-import type { AgentLoop } from '../core/agent-loop.js';
+import { createAgent } from './create-agent.js';
+import { defaultConfig } from '../config/default-config.js';
 import type { ToolDefinition } from '../core/types.js';
 
 export interface InteractiveCLIOptions {
@@ -17,6 +18,7 @@ export interface InteractiveCLIOptions {
 export class InteractiveCLI {
   private options: InteractiveCLIOptions;
   private history: string[] = [];
+  private agent: ReturnType<typeof createAgent> | null = null;
 
   constructor(options: InteractiveCLIOptions = {}) {
     this.options = options;
@@ -26,7 +28,18 @@ export class InteractiveCLI {
     console.log('🧬 EvoAgent Interactive CLI v0.1.0');
     console.log('Type your message, or "exit" to quit.\n');
 
-    // 简化版：使用 readline
+    // 初始化 Agent
+    try {
+      this.agent = createAgent({
+        model: this.options.model,
+        thinking: this.options.thinking
+      });
+      console.log(`⚙️  Model: ${this.options.model || defaultConfig.agent.model}\n`);
+    } catch (err) {
+      console.error(`❌ Failed to initialize agent: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+
     const readline = await import('readline');
     const rl = readline.createInterface({
       input: process.stdin,
@@ -36,7 +49,7 @@ export class InteractiveCLI {
 
     rl.prompt();
 
-    rl.on('line', (line) => {
+    rl.on('line', async (line) => {
       const input = line.trim();
       if (!input) {
         rl.prompt();
@@ -56,9 +69,29 @@ export class InteractiveCLI {
         return;
       }
 
+      if (input === 'status') {
+        console.log(`⚙️  Iterations: ${this.agent?.getIterationCount() ?? 0}`);
+        rl.prompt();
+        return;
+      }
+
       this.history.push(input);
-      console.log(`\n📝 You: ${input}`);
-      console.log('🤖 EvoAgent: (Agent Loop not connected yet — coming soon)\n');
+      console.log('');
+
+      try {
+        const systemPrompt = `You are EvoAgent, a helpful AI assistant. Be concise and accurate.`;
+        const tools: ToolDefinition[] = [];
+        const result = await this.agent!.run(
+          input,
+          tools,
+          systemPrompt,
+          (chunk) => process.stdout.write(chunk)
+        );
+        console.log(`\n\n✅ Done (${this.agent!.getIterationCount()} iterations)\n`);
+      } catch (err) {
+        console.error(`\n❌ Error: ${err instanceof Error ? err.message : String(err)}\n`);
+      }
+
       rl.prompt();
     });
 

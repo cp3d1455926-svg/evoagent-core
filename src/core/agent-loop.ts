@@ -21,6 +21,8 @@ export interface AgentLoopConfig {
   compressor: ContextCompressor;
   maxIterations: number;
   thinkingMode: boolean;
+  maxRetries?: number;       // LLM 调用最大重试次数
+  retryDelayMs?: number;     // 重试基础延迟
 }
 
 // ─── Agent Loop 核心类 ─────────────────────────────────
@@ -29,7 +31,37 @@ export class AgentLoop {
   private iterationCount = 0;
 
   constructor(config: AgentLoopConfig) {
-    this.config = config;
+    this.config = {
+      maxRetries: 3,
+      retryDelayMs: 1000,
+      ...config
+    };
+  }
+
+  /**
+   * 带重试的 LLM 调用
+   */
+  private async chatWithRetry(
+    request: Parameters<LLMClient['chat']>[0]
+  ): Promise<ReturnType<LLMClient['chat']>> {
+    const maxRetries = this.config.maxRetries ?? 3;
+    const baseDelay = this.config.retryDelayMs ?? 1000;
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.config.llm.chat(request);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < maxRetries) {
+          const delay = baseDelay * Math.pow(2, attempt); // exponential backoff
+          console.error(`LLM call failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms: ${lastError.message}`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    throw lastError;
   }
 
   /**
@@ -70,8 +102,8 @@ export class AgentLoop {
         messages.push(...compressed.messages);
       }
 
-      // 调用 LLM（流式）
-      const response = await this.config.llm.chat({
+      // 调用 LLM（流式 + 重试）
+      const response = await this.chatWithRetry({
         messages,
         tools,
         thinking: this.config.thinkingMode,
@@ -85,41 +117,48 @@ export class AgentLoop {
         return response.content ?? '';
       }
 
-      // 执行工具调用
-      const toolResults: ToolResult[] = [];
-      for (const toolCall of response.toolCalls) {
-        const tool = tools.find(t => t.name === toolCall.name);
-        if (!tool) {
-          toolResults.push({
-            toolCallId: toolCall.id,
-            content: `Error: Tool '${toolCall.name}' not found`,
-            isError: true
-          });
-          continue;
-        }
+      // 执行工具调用（并行化）
+      const toolResults: ToolResult[] = await Promise.all(
+        response.toolCalls.map(async (toolCall) => {
+          const tool = tools.find(t => t.name === toolCall.name);
+          if (!tool) {
+            return {
+              toolCallId: toolCall.id,
+              content: `Error: Tool '${toolCall.name}' not found`,
+              isError: true
+            };
+          }
 
-        // 权限检查
-        const permitted = await this.config.permissions.check(
-          toolCall.name,
-          toolCall.arguments
-        );
-        if (!permitted) {
-          toolResults.push({
-            toolCallId: toolCall.id,
-            content: `Permission denied: Tool '${toolCall.name}' requires approval`,
-            isError: true
-          });
-          continue;
-        }
+          // 权限检查
+          const permitted = await this.config.permissions.check(
+            toolCall.name,
+            toolCall.arguments
+          );
+          if (!permitted) {
+            return {
+              toolCallId: toolCall.id,
+              content: `Permission denied: Tool '${toolCall.name}' requires approval`,
+              isError: true
+            };
+          }
 
-        // 执行工具
-        const result = await this.config.tools.execute(toolCall.name, toolCall.arguments);
-        toolResults.push({
-          toolCallId: toolCall.id,
-          content: result.content,
-          isError: result.isError
-        });
-      }
+          // 执行工具（带错误恢复）
+          try {
+            const result = await this.config.tools.execute(toolCall.name, toolCall.arguments);
+            return {
+              toolCallId: toolCall.id,
+              content: result.content,
+              isError: result.isError
+            };
+          } catch (err) {
+            return {
+              toolCallId: toolCall.id,
+              content: `Tool execution error: ${err instanceof Error ? err.message : String(err)}`,
+              isError: true
+            };
+          }
+        })
+      );
 
       // 将结果追加到消息列表
       messages.push({
