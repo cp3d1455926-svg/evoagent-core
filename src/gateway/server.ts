@@ -14,6 +14,7 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import type { AgentLoop } from '../core/agent-loop.js';
 import type { LLMMessage, ToolDefinition } from '../core/types.js';
 
@@ -99,7 +100,9 @@ export async function startGateway(
   app.use(express.json());
 
   // ─── 静态文件（仪表台前端） ──────────────────────────
-  app.use(express.static(join(__dirname, 'frontend')));
+  // Serve frontend
+  const frontendPath = join(__dirname, 'frontend');
+  app.use(express.static(frontendPath));
 
   // ─── REST API ────────────────────────────────────────
 
