@@ -317,6 +317,48 @@ export class OpenAIClient implements LLMClient {
   }
 }
 
+// ─── 多模型 Failover 客户端 ──────────────────────────
+
+export interface FailoverConfig {
+  primary: { provider: string; apiKey: string; model: string; baseURL?: string; maxTokens?: number };
+  fallbacks: Array<{ provider: string; apiKey: string; model: string; baseURL?: string; maxTokens?: number }>;
+}
+
+export class FailoverClient implements LLMClient {
+  private clients: LLMClient[] = [];
+  private currentIndex = 0;
+
+  constructor(config: FailoverConfig) {
+    this.clients = [
+      createLLMClient(config.primary),
+      ...config.fallbacks.map(fb => createLLMClient(fb))
+    ];
+  }
+
+  getModel(): string {
+    return this.clients[this.currentIndex].getModel();
+  }
+
+  async chat(request: LLMChatRequest): Promise<LLMResponse> {
+    let lastError: Error | undefined;
+
+    for (let i = 0; i < this.clients.length; i++) {
+      const idx = (this.currentIndex + i) % this.clients.length;
+      try {
+        const result = await this.clients[idx].chat(request);
+        // 如果成功的是备用模型，不切换主模型（保持主模型优先）
+        return result;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        const modelName = this.clients[idx].getModel();
+        console.error(`LLM failover: ${modelName} failed (${lastError.message}), trying next...`);
+      }
+    }
+
+    throw lastError || new Error('All LLM providers failed');
+  }
+}
+
 // ─── 工厂函数 ──────────────────────────────────────────
 
 export function createLLMClient(config: {

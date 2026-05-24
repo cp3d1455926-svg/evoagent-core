@@ -5,7 +5,8 @@
  */
 
 import { AgentLoop } from '../core/agent-loop.js';
-import { createLLMClient } from '../core/llm-client.js';
+import { createLLMClient, FailoverClient } from '../core/llm-client.js';
+import type { FailoverConfig } from '../core/llm-client.js';
 import { MemorySystem } from '../memory/memory-system.js';
 import { DefaultPermissionSystem } from '../core/permission.js';
 import { ContextCompressor } from '../core/context-compressor.js';
@@ -19,18 +20,26 @@ export interface AgentOptions {
   permissionMode?: 'default' | 'bypass' | 'plan' | 'auto';
   apiKey?: string;
   baseURL?: string;
+  fallbacks?: Array<{ provider: string; apiKey: string; model: string; baseURL?: string }>;
 }
 
 export function createAgent(options: AgentOptions = {}): AgentLoop {
   const cfg = defaultConfig;
 
-  const llm = createLLMClient({
+  const primaryConfig = {
     provider: cfg.llm.provider,
     apiKey: options.apiKey || process.env.LONGCAT_API_KEY || process.env.OPENAI_API_KEY || '',
     model: options.model || cfg.llm.model,
     baseURL: options.baseURL || cfg.llm.baseURL,
     maxTokens: cfg.llm.maxTokens
-  });
+  };
+
+  const llm = options.fallbacks && options.fallbacks.length > 0
+    ? new FailoverClient({
+        primary: primaryConfig,
+        fallbacks: options.fallbacks
+      })
+    : createLLMClient(primaryConfig);
 
   const memory = new MemorySystem({
     working: { maxTokens: cfg.memory.working.maxTokens },
