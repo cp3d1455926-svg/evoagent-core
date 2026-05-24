@@ -53,11 +53,20 @@ export async function runSetup(): Promise<void> {
 
   // ─── 第一步：大语言模型 ────────────────────────────
   console.log('--- 第一步：大语言模型配置 ---');
-  console.log('  支持的提供商：openai、anthropic、longcat');
+   console.log('  支持的提供商：openai、anthropic、longcat、deepseek、glm、moonshot、通义千问、文心一言等');
   console.log('');
 
   const provider = await askWithDefault('提供商', 'openai');
-  const model = await askWithDefault('模型', provider === 'anthropic' ? 'claude-sonnet-4-20250514' : provider === 'longcat' ? 'LongCat-2.0-Preview' : 'gpt-4o');
+  const modelDefaults: Record<string, string> = {
+    anthropic: 'claude-sonnet-4-20250514',
+    longcat: 'LongCat-2.0-Preview',
+    deepseek: 'deepseek-chat',
+    glm: 'glm-4',
+    moonshot: 'moonshot-v1-8k',
+    openai: 'gpt-4o'
+  };
+  const defaultModel = modelDefaults[provider] || 'gpt-4o';
+  const model = await askWithDefault('模型', defaultModel);
   const apiKey = await ask('API 密钥' + (process.env.OPENAI_API_KEY ? '（留空则使用环境变量）' : '') + '：');
   const baseURL = await askWithDefault('接口地址（留空使用默认）', provider === 'longcat' ? 'https://api.longcat.chat/openai' : '');
 

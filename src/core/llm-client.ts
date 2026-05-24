@@ -362,27 +362,40 @@ export class FailoverClient implements LLMClient {
 // ─── 工厂函数 ──────────────────────────────────────────
 
 export function createLLMClient(config: {
-  provider: 'anthropic' | 'openai' | string;
+  provider: string;
   apiKey: string;
   model: string;
   baseURL?: string;
   maxTokens?: number;
 }): LLMClient {
-  switch (config.provider) {
-    case 'anthropic':
-      return new AnthropicClient({
-        apiKey: config.apiKey,
-        model: config.model,
-        baseURL: config.baseURL,
-        maxTokens: config.maxTokens
-      });
-    case 'openai':
-    default:
-      return new OpenAIClient({
-        apiKey: config.apiKey,
-        model: config.model,
-        baseURL: config.baseURL,
-        maxTokens: config.maxTokens
-      });
+  const provider = config.provider.toLowerCase();
+
+  // Anthropic 使用原生 API
+  if (provider === 'anthropic' || provider === 'claude') {
+    return new AnthropicClient({
+      apiKey: config.apiKey,
+      model: config.model,
+      baseURL: config.baseURL,
+      maxTokens: config.maxTokens
+    });
   }
+
+  // 已知需要特殊 base URL 的提供商
+  const knownBaseURLs: Record<string, string> = {
+    deepseek: 'https://api.deepseek.com/v1',
+    glm: 'https://open.bigmodel.cn/api/paas/v4',
+    moonshot: 'https://api.moonshot.cn/v1',
+    qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    wenxin: 'https://qianfan.baidubce.com/v2',
+    longcat: 'https://api.longcat.chat/openai',
+  };
+
+  const resolvedBaseURL = config.baseURL || knownBaseURLs[provider];
+
+  return new OpenAIClient({
+    apiKey: config.apiKey,
+    model: config.model,
+    baseURL: resolvedBaseURL,
+    maxTokens: config.maxTokens
+  });
 }
