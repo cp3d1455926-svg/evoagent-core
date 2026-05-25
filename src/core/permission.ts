@@ -24,6 +24,7 @@ interface PermissionConfig {
   allowedTools: string[];
   deniedTools: string[];
   sandboxEnabled: boolean;
+  autoApprove?: boolean;  // default 模式下是否自动批准写入操作
 }
 
 export class DefaultPermissionSystem implements PermissionSystem {
@@ -34,7 +35,8 @@ export class DefaultPermissionSystem implements PermissionSystem {
       mode: config.mode ?? 'default',
       allowedTools: config.allowedTools ?? [],
       deniedTools: config.deniedTools ?? [],
-      sandboxEnabled: config.sandboxEnabled ?? false
+      sandboxEnabled: config.sandboxEnabled ?? false,
+      autoApprove: config.autoApprove ?? false
     };
   }
 
@@ -73,8 +75,13 @@ export class DefaultPermissionSystem implements PermissionSystem {
       default: {
         // 默认：写入和网络需确认
         const writeTools = ['bash', 'write', 'edit', 'delete', 'deploy'];
+        const networkTools = ['web_fetch', 'web_search', 'http'];
         if (writeTools.includes(toolName.toLowerCase())) {
           return this.promptApproval(toolName);
+        }
+        // 网络工具在 default 模式下允许（只读），但记录日志
+        if (networkTools.includes(toolName.toLowerCase())) {
+          return true;
         }
         return true;
       }
@@ -90,16 +97,22 @@ export class DefaultPermissionSystem implements PermissionSystem {
   }
 
   /**
-   * 请求用户审批（简化版：自动批准，实际应接入渠道交互）
+   * 请求用户审批
+   *
+   * 行为取决于配置：
+   * - autoApprove: true → 自动批准（开发/测试用）
+   * - autoApprove: false → 拒绝并提示用户切换到 bypass 模式
+   *
    * 生产环境应通过 WebSocket/消息渠道等待用户回复
    */
   private async promptApproval(toolName: string): Promise<boolean> {
-    // TODO: 接入实际审批流程
-    // 1. 通过渠道发送审批请求
-    // 2. 等待用户回复
-    // 3. 返回审批结果
-    console.warn(`⚠️  Tool '${toolName}' requires approval in default mode (auto-approved for now)`);
-    return true;
+    if (this.config.autoApprove) {
+      console.warn(`⚠️  Tool '${toolName}' auto-approved (autoApprove=true)`);
+      return true;
+    }
+    // 默认拒绝，需要用户显式切换到 bypass 模式
+    console.error(`🚫 Tool '${toolName}' blocked in default mode. Use 'bypass' mode to allow.`);
+    return false;
   }
 
   private riskScore(toolName: string): number {

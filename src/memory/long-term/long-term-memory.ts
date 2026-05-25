@@ -1,10 +1,14 @@
 /* eslint-disable no-console */
 /**
  * 长期记忆层 — Long-term Memory
- * 
+ *
  * 基于 TF-IDF 的语义检索系统（无需外部向量数据库）
  * 支持内存模式和 ChromaDB 模式
+ * v0.2.0: 添加 JSON 文件持久化
  */
+
+import { readFile, writeFile, mkdir } from 'fs/promises';
+import { dirname } from 'path';
 
 interface MemoryEntry {
   id: string;
@@ -19,15 +23,23 @@ interface SearchResult {
   score: number;
 }
 
+export interface LongTermMemoryConfig {
+  provider: string;
+  url?: string;
+  persistPath?: string;  // JSON 持久化路径
+}
+
 export class LongTermMemory {
   private provider: string;
   private url?: string;
+  private persistPath?: string;
   private memories: MemoryEntry[] = [];
   private stopWords: Set<string>;
 
-  constructor(provider: string, url?: string) {
+  constructor(provider: string, url?: string, persistPath?: string) {
     this.provider = provider;
     this.url = url;
+    this.persistPath = persistPath || this.getDefaultPersistPath();
     // 中英文停用词
     this.stopWords = new Set([
       'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
@@ -50,11 +62,40 @@ export class LongTermMemory {
     ]);
   }
 
+  private getDefaultPersistPath(): string {
+    const home = process.env.USERPROFILE || process.env.HOME || '.';
+    return home + '/.evoagent/long-term-memory.json';
+  }
+
   async initialize(): Promise<void> {
     if (this.provider === 'chromadb') {
       console.log(`📦 LongTermMemory: connecting to ChromaDB at ${this.url}`);
     } else {
       console.log('📦 LongTermMemory: using in-memory mode with TF-IDF search');
+    }
+    // 从磁盘加载已有记忆
+    await this.loadFromDisk();
+  }
+
+  private async loadFromDisk(): Promise<void> {
+    if (!this.persistPath) return;
+    try {
+      const data = await readFile(this.persistPath, 'utf-8');
+      const entries: MemoryEntry[] = JSON.parse(data);
+      this.memories = entries;
+      console.log(`📦 LongTermMemory: loaded ${entries.length} entries from disk`);
+    } catch {
+      // 文件不存在或损坏，从空开始
+    }
+  }
+
+  private async saveToDisk(): Promise<void> {
+    if (!this.persistPath) return;
+    try {
+      await mkdir(dirname(this.persistPath), { recursive: true });
+      await writeFile(this.persistPath, JSON.stringify(this.memories, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('LongTermMemory: failed to persist', err);
     }
   }
 
@@ -67,6 +108,7 @@ export class LongTermMemory {
       accessCount: 0
     };
     this.memories.push(entry);
+    await this.saveToDisk();
   }
 
   async search(query: string, limit: number = 5): Promise<SearchResult[]> {
@@ -151,6 +193,6 @@ export class LongTermMemory {
   }
 
   async close(): Promise<void> {
-    // TODO: 持久化到数据库
+    await this.saveToDisk();
   }
 }

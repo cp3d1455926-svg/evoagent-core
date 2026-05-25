@@ -26,3 +26,8 @@ export { GitTool } from './tools/git.js';
 export { MCPTool } from './tools/mcp-tool.js';
 
 export type { LLMMessage, LLMResponse, ToolDefinition, ToolResult, PermissionLevel } from './core/types.js';
+
+// ─── 遥测 ─────────────────────────────────────────────
+export { Logger, createLogger, rootLogger } from './telemetry/logger.js';
+export type { LogLevel, LogEntry, LoggerConfig } from './telemetry/logger.js';
+export { MetricsCollector, MetricNames } from './telemetry/metrics.js';

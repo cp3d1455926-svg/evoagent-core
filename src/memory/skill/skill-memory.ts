@@ -88,17 +88,70 @@ export class SkillMemory {
 
   /**
    * 评估对话并学习新技能
+   *
+   * 检测对话中的操作模式，自动提取为可复用技能：
+   * 1. 检测步骤型对话（包含序号或"步骤"/"流程"关键词）
+   * 2. 提取操作名称和模板
+   * 3. 如果匹配度高于阈值，添加为新技能
    */
   async evaluateAndLearn(conversation: string, finalResponse: string): Promise<void> {
     if (!this.autoEvolve) return;
 
-    // 简化版：检测是否出现了新的操作模式
-    // 实际项目中应使用 LLM 提取技能
-    const hasNewPattern = conversation.includes('步骤') || conversation.includes('流程');
-    if (hasNewPattern && finalResponse.includes('完成')) {
-      // 记录潜在的新技能（简化处理）
-      // TODO: 使用 LLM 自动提取和总结技能
+    const lower = conversation.toLowerCase();
+
+    // 检测步骤型模式
+    const hasSteps = /步骤|流程|\d+[.、)]|first|then|finally|step/i.test(conversation);
+    const isSuccessful = /完成|成功|done|finished|✅|success/i.test(finalResponse);
+
+    if (!hasSteps || !isSuccessful) return;
+
+    // 提取潜在技能名称
+    const userMsg = conversation.split('\n').find(l => l.startsWith('user:') || l.startsWith('用户：'));
+    if (!userMsg) return;
+
+    const context = userMsg.slice(0, 50);
+    const existing = this.skills.find(s =>
+      s.name.toLowerCase().includes(context.slice(0, 20).toLowerCase()) ||
+      context.toLowerCase().includes(s.name.toLowerCase())
+    );
+
+    if (existing) {
+      // 更新已有技能
+      existing.usageCount++;
+      existing.successRate = Math.min(1.0, existing.successRate + 0.05);
+      existing.lastUsedAt = new Date();
+    } else {
+      // 创建新技能
+      const name = this.extractSkillName(context);
+      if (name && name.length > 2) {
+        this.addSkill({
+          name,
+          description: `Auto-learned skill from conversation: ${context}`,
+          pattern: name.toLowerCase().split(/[\s,]+/).join('|'),
+          template: this.extractTemplate(conversation)
+        });
+      }
     }
+  }
+
+  private extractSkillName(context: string): string {
+    // 取前 5 个有意义的词
+    const words = context
+      .replace(/[^\w\u4e00-\u9fff\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length >= 2)
+      .slice(0, 5);
+    return words.join(' ');
+  }
+
+  private extractTemplate(conversation: string): string {
+    // 提取步骤型内容作为模板
+    const lines = conversation.split('\n');
+    const steps = lines.filter(l => /^\d+[.、)]|[-*•]|步骤|step/i.test(l.trim()));
+    if (steps.length >= 2) {
+      return steps.slice(0, 5).map((s, i) => `${i + 1}. ${s.trim()}`).join('\n');
+    }
+    return '1. Analyze the task\n2. Execute step by step\n3. Verify the result';
   }
 
   /**

@@ -5,7 +5,7 @@
 ## 安装
 
 ```bash
-npm install evoagent-core@0.2.0
+npm install evoagent-core@0.3.0
 ```
 
 可选依赖（用于 SQLite 持久化）：

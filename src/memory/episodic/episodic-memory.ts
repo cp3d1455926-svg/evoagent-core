@@ -33,9 +33,14 @@ export class EpisodicMemory {
   }
 
   private async loadSQLite(): Promise<any> {
-    // Use eval to avoid TypeScript static analysis of optional dependency
-    const Database = await (0, eval)('import("better-sqlite3")') as any;
-    return Database.default || Database;
+    // Dynamic import for optional dependency
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = await import('better-sqlite3') as any;
+      return Database.default || Database;
+    } catch {
+      throw new Error('better-sqlite3 not installed');
+    }
   }
 
   private getDefaultDbPath(): string {

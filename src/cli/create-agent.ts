@@ -11,6 +11,7 @@ import { MemorySystem } from '../memory/memory-system.js';
 import { DefaultPermissionSystem } from '../core/permission.js';
 import { ContextCompressor } from '../core/context-compressor.js';
 import { ToolExecutor } from '../tools/tool-executor.js';
+import { Logger } from '../telemetry/logger.js';
 import { defaultConfig } from '../config/default-config.js';
 
 export interface AgentOptions {
@@ -21,6 +22,7 @@ export interface AgentOptions {
   apiKey?: string;
   baseURL?: string;
   fallbacks?: Array<{ provider: string; apiKey: string; model: string; baseURL?: string }>;
+  logger?: import('../telemetry/logger.js').Logger;
 }
 
 export function createAgent(options: AgentOptions = {}): AgentLoop {
@@ -40,6 +42,8 @@ export function createAgent(options: AgentOptions = {}): AgentLoop {
         fallbacks: options.fallbacks
       })
     : createLLMClient(primaryConfig);
+
+  const logger = options.logger ?? new Logger('evoagent');
 
   const memory = new MemorySystem({
     working: { maxTokens: cfg.memory.working.maxTokens },
@@ -71,6 +75,7 @@ export function createAgent(options: AgentOptions = {}): AgentLoop {
     maxIterations: options.maxIterations || cfg.agent.maxIterations,
     thinkingMode: options.thinking || cfg.agent.thinkingMode,
     maxRetries: 3,
-    retryDelayMs: 1000
+    retryDelayMs: 1000,
+    logger
   });
 }

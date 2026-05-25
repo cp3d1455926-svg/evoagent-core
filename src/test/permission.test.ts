@@ -52,4 +52,26 @@ describe('DefaultPermissionSystem', () => {
     expect(ps.getMode()).toBe('plan');
     expect(await ps.check('bash', {})).toBe(false);
   });
+
+  it('default mode blocks write tools when autoApprove=false', async () => {
+    const ps = new DefaultPermissionSystem({ mode: 'default', autoApprove: false });
+    expect(await ps.check('bash', {})).toBe(false);
+    expect(await ps.check('write', {})).toBe(false);
+    expect(await ps.check('edit', {})).toBe(false);
+    expect(await ps.check('delete', {})).toBe(false);
+    expect(await ps.check('deploy', {})).toBe(false);
+  });
+
+  it('default mode allows write tools when autoApprove=true', async () => {
+    const ps = new DefaultPermissionSystem({ mode: 'default', autoApprove: true });
+    expect(await ps.check('bash', {})).toBe(true);
+    expect(await ps.check('write', {})).toBe(true);
+  });
+
+  it('default mode allows read tools', async () => {
+    const ps = new DefaultPermissionSystem({ mode: 'default', autoApprove: false });
+    expect(await ps.check('read', {})).toBe(true);
+    expect(await ps.check('search', {})).toBe(true);
+    expect(await ps.check('file', {})).toBe(true);
+  });
 });
