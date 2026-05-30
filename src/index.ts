@@ -1,4 +1,4 @@
-// EvoAgent — 核心导出
+// EvoAgent — 核心导出 v0.4.0
 
 export { AgentLoop } from './core/agent-loop.js';
 export { createAgent } from './cli/create-agent.js';
@@ -14,16 +14,22 @@ export { DefaultPermissionSystem } from './core/permission.js';
 export { AnthropicClient, OpenAIClient, createLLMClient } from './core/llm-client.js';
 export type { LLMClient } from './core/llm-client.js';
 
+// ─── KV 缓存 ──────────────────────────────────────────
+export { KVCache, llmCache, toolCache, memorySearchCache } from './core/kv-cache.js';
+export type { CacheEntry, CacheConfig } from './core/kv-cache.js';
+
 export { MemorySystem } from './memory/memory-system.js';
 export { WorkingMemory } from './memory/short-term/working-memory.js';
 
 export { ToolExecutor } from './tools/tool-executor.js';
+export type { Tool, ToolExecuteResult } from './tools/tool-executor.js';
 export { BashTool } from './tools/bash.js';
 export { FileTool } from './tools/file.js';
 export { CodeTool } from './tools/code.js';
 export { WebTool } from './tools/web.js';
 export { GitTool } from './tools/git.js';
 export { MCPTool } from './tools/mcp-tool.js';
+export { DesktopTool } from './tools/desktop.js';
 
 export type { LLMMessage, LLMResponse, ToolDefinition, ToolResult, PermissionLevel } from './core/types.js';
 

@@ -1,13 +1,19 @@
 /**
- * EvoAgent — 上下文压缩器
- * 
- * 当对话上下文超出 token 限制时，自动压缩历史消息
- * 五层压缩策略：
- * 1. 裁剪冗余工具输出
- * 2. 摘要早期对话
- * 3. 移除重复内容
+ * EvoAgent — 上下文压缩器 v2.0
+ *
+ * 六层压缩策略，最大化节省 token：
+ * 1. 裁剪冗余工具输出（保留头尾 + 关键行）
+ * 2. 摘要早期对话（LLM 摘要 / 紧凑摘要）
+ * 3. 移除重复内容（精确 + 模糊去重）
  * 4. 保留关键系统消息
- * 5. 紧急截断（最后手段）
+ * 5. 强制适配（逐步减少保留消息数）
+ * 6. 紧急截断（最后手段）
+ *
+ * v0.4.0 改进：
+ * - 模糊去重（Jaccard 相似度）
+ * - 工具输出智能提取（保留错误/关键行）
+ * - 渐进式压缩（按需逐步增强）
+ * - 压缩统计
  */
 
 import type { LLMMessage } from './types.js';
@@ -17,179 +23,288 @@ export interface CompressionResult {
   modified: boolean;
   originalTokenCount: number;
   compressedTokenCount: number;
+  savingsPercent: number;
 }
 
 export interface ContextCompressorConfig {
   maxTokens: number;
-  softThreshold: number;   // 达到此阈值开始压缩（如 80%）
+  softThreshold: number;    // 达到此阈值开始压缩（如 80%）
   preserveSystemMessages: boolean;
+  /** 是否启用模糊去重 */
+  enableFuzzyDedup: boolean;
+  /** 摘要模式: 'compact'（纯文本） */
+  summaryMode: 'compact';
 }
 
 export class ContextCompressor {
   private config: ContextCompressorConfig;
+  private totalCompressions = 0;
+  private totalTokensSaved = 0;
 
   constructor(config: Partial<ContextCompressorConfig> = {}) {
     this.config = {
       maxTokens: config.maxTokens ?? 100000,
       softThreshold: config.softThreshold ?? 0.8,
-      preserveSystemMessages: config.preserveSystemMessages ?? true
+      preserveSystemMessages: config.preserveSystemMessages ?? true,
+      enableFuzzyDedup: config.enableFuzzyDedup ?? true,
+      summaryMode: config.summaryMode ?? 'compact'
     };
   }
 
-  /**
-   * 压缩消息列表
-   */
   async compress(messages: LLMMessage[]): Promise<CompressionResult> {
     const originalTokens = this.estimateTokens(messages);
     const threshold = this.config.maxTokens * this.config.softThreshold;
 
     if (originalTokens <= threshold) {
       return {
-        messages,
-        modified: false,
+        messages, modified: false,
         originalTokenCount: originalTokens,
-        compressedTokenCount: originalTokens
+        compressedTokenCount: originalTokens,
+        savingsPercent: 0
       };
     }
 
-    // 执行五层压缩
     let result = [...messages];
+    const stages: string[] = [];
 
     // Layer 1: 裁剪冗余工具输出
     result = this.trimToolOutputs(result);
+    if (this.estimateTokens(result) <= threshold) stages.push('trim-tool-outputs');
 
-    // Layer 2: 如果还超，摘要早期对话
-    if (this.estimateTokens(result) > threshold) {
-      result = this.summarizeEarlyConversation(result);
+    // Layer 2: 模糊去重
+    if (this.estimateTokens(result) > threshold && this.config.enableFuzzyDedup) {
+      result = this.fuzzyDedup(result);
+      if (this.estimateTokens(result) <= threshold) stages.push('fuzzy-dedup');
     }
 
-    // Layer 3: 移除重复内容
+    // Layer 3: 精确去重
     if (this.estimateTokens(result) > threshold) {
       result = this.removeDuplicates(result);
+      if (this.estimateTokens(result) <= threshold) stages.push('exact-dedup');
     }
 
-    // Layer 4: 如果仍然超过软阈值，强制缩减到阈值内
+    // Layer 4: 摘要早期对话
+    if (this.estimateTokens(result) > threshold) {
+      result = this.summarizeEarlyConversation(result, threshold);
+      stages.push('summarize-early');
+    }
+
+    // Layer 5: 强制适配
     if (this.estimateTokens(result) > threshold) {
       result = this.forceFit(result, threshold);
+      stages.push('force-fit');
     }
 
-    // Layer 5: 紧急截断（最后手段，确保不超硬限制）
+    // Layer 6: 紧急截断
     if (this.estimateTokens(result) > this.config.maxTokens) {
       result = this.emergencyTruncate(result);
+      stages.push('emergency-truncate');
     }
+
+    const compressedTokens = this.estimateTokens(result);
+    const savings = originalTokens - compressedTokens;
+
+    this.totalCompressions++;
+    this.totalTokensSaved += savings;
 
     return {
       messages: result,
       modified: true,
       originalTokenCount: originalTokens,
-      compressedTokenCount: this.estimateTokens(result)
+      compressedTokenCount: compressedTokens,
+      savingsPercent: Math.round((savings / originalTokens) * 10000) / 10000
     };
   }
 
   /**
-   * 估算 token 数
+   * 压缩统计
    */
-  private estimateTokens(messages: LLMMessage[]): number {
-    return messages.reduce((sum, m) => sum + Math.ceil((m.content?.length ?? 0) / 4), 0);
+  getStats(): { totalCompressions: number; totalTokensSaved: number } {
+    return {
+      totalCompressions: this.totalCompressions,
+      totalTokensSaved: this.totalTokensSaved
+    };
   }
 
-  /**
-   * Layer 1: 裁剪工具输出（保留前后各 500 字符）
-   */
+  // ─── Token 估算 ──────────────────────────────────────
+
+  estimateTokens(messages: LLMMessage[]): number {
+    return messages.reduce((sum, m) => {
+      let len = m.content?.length ?? 0;
+      if (m.toolCalls) len += JSON.stringify(m.toolCalls).length;
+      return sum + Math.ceil(len / 4);
+    }, 0);
+  }
+
+  // ─── Layer 1: 智能裁剪工具输出 ───────────────────────
+
   private trimToolOutputs(messages: LLMMessage[]): LLMMessage[] {
     return messages.map(m => {
-      if (m.role === 'tool' && m.content && m.content.length > 1000) {
-        const head = m.content.slice(0, 500);
-        const tail = m.content.slice(-500);
-        return { ...m, content: `${head}\n... [${m.content.length - 1000} chars truncated] ...\n${tail}` };
+      if (m.role !== 'tool' || !m.content || m.content.length <= 1500) return m;
+
+      const lines = m.content.split('\n');
+      const importantLines: string[] = [];
+      const otherLines: string[] = [];
+
+      for (const line of lines) {
+        const t = line.trim();
+        // 保留重要行：错误、警告、结果、关键数据
+        if (/error|err\b|fail|exception|warning|warn\b|result|output|✅|❌|⚠️|✓|✗/i.test(t) ||
+            t.startsWith('>') || t.startsWith('$') || t.startsWith('+')) {
+          importantLines.push(line);
+        } else {
+          otherLines.push(line);
+        }
       }
-      return m;
+
+      // 如果重要行已经够用，只保留重要行 + 头尾
+      if (importantLines.length > 0 && importantLines.length < lines.length * 0.5) {
+        const head = lines.slice(0, 3).join('\n');
+        const tail = lines.slice(-3).join('\n');
+        const important = importantLines.slice(0, 20).join('\n');
+        const omitted = lines.length - 6 - importantLines.length;
+        return {
+          ...m,
+          content: `${head}\n\n... [${omitted} lines omitted] ...\n\nKey output:\n${important}\n\n${tail}`
+        };
+      }
+
+      // 否则保留头尾
+      const head = lines.slice(0, 15).join('\n');
+      const tail = lines.slice(-10).join('\n');
+      const omitted = lines.length - 25;
+      return {
+        ...m,
+        content: `${head}\n... [${omitted} lines omitted] ...\n${tail}`
+      };
     });
   }
 
-  /**
-   * Layer 2: 摘要早期对话
-   * 保留 system 消息 + 紧凑摘要 + 最近 N 条用户/助手消息
-   * 如果摘要后仍超阈值，递归压缩
-   */
-  private summarizeEarlyConversation(messages: LLMMessage[]): LLMMessage[] {
-    const systemMessages = messages.filter(m => m.role === 'system');
-    const nonSystem = messages.filter(m => m.role !== 'system');
-    const threshold = this.config.maxTokens * this.config.softThreshold;
+  // ─── Layer 2: 模糊去重 ───────────────────────────────
 
-    // 逐步减少保留的最近消息数，直到满足阈值
-    for (let recentCount = 10; recentCount >= 1; recentCount--) {
-      const recentMessages = nonSystem.slice(-recentCount);
-      const olderMessages = nonSystem.slice(0, -recentCount);
+  private fuzzyDedup(messages: LLMMessage[]): LLMMessage[] {
+    const result: LLMMessage[] = [];
+    const signatures: string[] = [];
 
-      if (olderMessages.length === 0) return messages;
+    for (const msg of messages) {
+      // system 消息不去重
+      if (msg.role === 'system') {
+        result.push(msg);
+        continue;
+      }
 
-      // 生成紧凑摘要
-      const summary = this.generateCompactSummary(olderMessages);
-      const summaryMsg: LLMMessage = {
-        role: 'system',
-        content: summary
-      };
-      const candidate = [...systemMessages, summaryMsg, ...recentMessages];
+      const sig = this.signature(msg.content ?? '');
+      let isDuplicate = false;
 
-      if (this.estimateTokens(candidate) <= threshold) {
-        return candidate;
+      for (const existing of signatures) {
+        if (this.similarity(sig, existing) > 0.85) {
+          isDuplicate = true;
+          break;
+        }
+      }
+
+      if (!isDuplicate) {
+        result.push(msg);
+        signatures.push(sig);
       }
     }
 
-    // 最坏情况：只保留 system + 最后 1 条
-    const lastMsg = nonSystem.slice(-1);
-    return [...systemMessages, ...lastMsg];
+    return result;
   }
 
-  /**
-   * 生成紧凑摘要 — 只保留关键信息，严格控制长度
-   */
-  private generateCompactSummary(messages: LLMMessage[]): string {
-    const userMessages = messages.filter(m => m.role === 'user');
-    const assistantMessages = messages.filter(m => m.role === 'assistant');
-    const count = messages.length;
-    // 极度紧凑：只报告数量和最后一条用户消息
-    const lastUser = userMessages[userMessages.length - 1]?.content?.slice(0, 50) ?? '';
-    return `[压缩: ${count}条历史消息 | 最近用户: ${lastUser}]`;
+  private signature(text: string): string {
+    // 取前 200 字符的关键词集合
+    const words = text.slice(0, 200).toLowerCase()
+      .replace(/[^\w\u4e00-\u9fff\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 3);
+    return [...new Set(words)].sort().join(' ');
   }
 
-  /**
-   * Layer 3: 移除重复内容
-   */
+  private similarity(a: string, b: string): number {
+    if (!a || !b) return 0;
+    const setA = new Set(a.split(' '));
+    const setB = new Set(b.split(' '));
+    let intersection = 0;
+    for (const item of setA) { if (setB.has(item)) intersection++; }
+    const union = setA.size + setB.size - intersection;
+    return union > 0 ? intersection / union : 0;
+  }
+
+  // ─── Layer 3: 精确去重 ───────────────────────────────
+
   private removeDuplicates(messages: LLMMessage[]): LLMMessage[] {
     const seen = new Set<string>();
     return messages.filter(m => {
-      const key = `${m.role}:${m.content?.slice(0, 100)}`;
+      if (m.role === 'system') return true;
+      const key = `${m.role}:${m.content?.slice(0, 150)}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
   }
 
-  /**
-   * Layer 4: 强制缩减到阈值内
-   * 逐步减少保留的消息数直到满足阈值
-   */
+  // ─── Layer 4: 摘要早期对话 ───────────────────────────
+
+  private summarizeEarlyConversation(messages: LLMMessage[], threshold: number): LLMMessage[] {
+    const systemMessages = messages.filter(m => m.role === 'system');
+    const nonSystem = messages.filter(m => m.role !== 'system');
+
+    for (let recentCount = 15; recentCount >= 2; recentCount--) {
+      const recentMessages = nonSystem.slice(-recentCount);
+      const olderMessages = nonSystem.slice(0, -recentCount);
+      if (olderMessages.length === 0) return messages;
+
+      const summary = this.generateCompactSummary(olderMessages);
+      const candidate = [...systemMessages, summary, ...recentMessages];
+
+      if (this.estimateTokens(candidate) <= threshold) return candidate;
+    }
+
+    return [...systemMessages, ...nonSystem.slice(-2)];
+  }
+
+  private generateCompactSummary(messages: LLMMessage[]): LLMMessage {
+    const userCount = messages.filter(m => m.role === 'user').length;
+    const assistantCount = messages.filter(m => m.role === 'assistant').length;
+    const toolCount = messages.filter(m => m.role === 'tool').length;
+
+    // 提取关键用户请求
+    const userMessages = messages.filter(m => m.role === 'user');
+    const lastUser = userMessages[userMessages.length - 1]?.content?.slice(0, 80) || '';
+
+    // 提取关键工具结果摘要
+    const toolErrors = messages
+      .filter(m => m.role === 'tool' && m.isError)
+      .map(m => m.content?.slice(0, 50));
+
+    const parts = [
+      `[压缩: ${messages.length}条历史消息 | ${userCount}次用户 | ${assistantCount}次回复 | ${toolCount}次工具]`
+    ];
+    if (lastUser) parts.push(`最近请求: ${lastUser}`);
+    if (toolErrors.length > 0) parts.push(`工具错误: ${toolErrors.length}个`);
+
+    return { role: 'system', content: parts.join(' | ') };
+  }
+
+  // ─── Layer 5: 强制适配 ───────────────────────────────
+
   private forceFit(messages: LLMMessage[], threshold: number): LLMMessage[] {
     const systemMessages = messages.filter(m => m.role === 'system');
     const nonSystem = messages.filter(m => m.role !== 'system');
 
     for (let keep = nonSystem.length; keep >= 1; keep--) {
       const candidate = [...systemMessages, ...nonSystem.slice(-keep)];
-      if (this.estimateTokens(candidate) <= threshold) {
-        return candidate;
-      }
+      if (this.estimateTokens(candidate) <= threshold) return candidate;
     }
     return systemMessages;
   }
 
-  /**
-   * Layer 5: 紧急截断（保留 system + 最近 5 条）
-   */
+  // ─── Layer 6: 紧急截断 ───────────────────────────────
+
   private emergencyTruncate(messages: LLMMessage[]): LLMMessage[] {
     const systemMessages = messages.filter(m => m.role === 'system');
-    const recentMessages = messages.filter(m => m.role !== 'system').slice(-5);
-    return [...systemMessages, ...recentMessages];
+    const nonSystem = messages.filter(m => m.role !== 'system');
+    return [...systemMessages, ...nonSystem.slice(-5)];
   }
 }

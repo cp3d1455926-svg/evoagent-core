@@ -5,6 +5,7 @@
 export const defaultConfig = {
   agent: {
     name: 'EvoAgent',
+    version: '0.4.0',
     model: 'LongCat-2.0-Preview',
     maxTokens: 128000,
     thinkingMode: false,
@@ -21,7 +22,7 @@ export const defaultConfig = {
 
   permissions: {
     defaultMode: 'default' as const,
-    allowedTools: ['bash', 'code', 'file', 'web', 'mcp', 'feishu_card'],
+    allowedTools: ['bash', 'code', 'file', 'web', 'mcp', 'git', 'desktop'],
     sandboxEnabled: false
   },
 
@@ -30,7 +31,7 @@ export const defaultConfig = {
       maxTokens: 4096
     },
     longTerm: {
-      provider: 'memory' as const,  // 'chromadb' | 'memory'
+      provider: 'memory' as const,
       url: 'http://localhost:8000',
       collection: 'evoagent_memory'
     },
@@ -39,9 +40,11 @@ export const defaultConfig = {
       minFeedbackForEvolution: 5
     },
     episodic: {
-      provider: 'sqlite' as const,  // 'sqlite' | 'postgresql'
+      provider: 'sqlite' as const,
       url: 'sqlite://~/.evoagent/episodic.db'
-    }
+    },
+    consolidationInterval: 10,
+    maxContextTokens: 4000
   },
 
   channels: {

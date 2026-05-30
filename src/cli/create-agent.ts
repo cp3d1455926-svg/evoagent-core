@@ -1,11 +1,17 @@
 /**
- * EvoAgent — Agent 工厂
- * 
+ * EvoAgent — Agent 工厂 v2.0
+ *
  * 统一创建配置好的 AgentLoop 实例
+ * v0.4.0 改进：
+ * - 集成 KV 缓存
+ * - Token 预算控制
+ * - 增强记忆配置
+ * - 模糊去重
  */
 
 import { AgentLoop } from '../core/agent-loop.js';
 import { createLLMClient, FailoverClient } from '../core/llm-client.js';
+import { llmCache } from '../core/kv-cache.js';
 import type { FailoverConfig } from '../core/llm-client.js';
 import { MemorySystem } from '../memory/memory-system.js';
 import { DefaultPermissionSystem } from '../core/permission.js';
@@ -23,6 +29,10 @@ export interface AgentOptions {
   baseURL?: string;
   fallbacks?: Array<{ provider: string; apiKey: string; model: string; baseURL?: string }>;
   logger?: import('../telemetry/logger.js').Logger;
+  /** Token 预算（整个会话） */
+  tokenBudget?: number;
+  /** 是否启用 LLM 响应缓存 */
+  enableCache?: boolean;
 }
 
 export function createAgent(options: AgentOptions = {}): AgentLoop {
@@ -33,7 +43,9 @@ export function createAgent(options: AgentOptions = {}): AgentLoop {
     apiKey: options.apiKey || process.env.LONGCAT_API_KEY || process.env.OPENAI_API_KEY || '',
     model: options.model || cfg.llm.model,
     baseURL: options.baseURL || cfg.llm.baseURL,
-    maxTokens: cfg.llm.maxTokens
+    maxTokens: cfg.llm.maxTokens,
+    cache: options.enableCache !== false ? llmCache : undefined,
+    tokenBudget: options.tokenBudget
   };
 
   const llm = options.fallbacks && options.fallbacks.length > 0
@@ -49,7 +61,9 @@ export function createAgent(options: AgentOptions = {}): AgentLoop {
     working: { maxTokens: cfg.memory.working.maxTokens },
     longTerm: { provider: cfg.memory.longTerm.provider, url: cfg.memory.longTerm.url },
     skill: { autoEvolve: cfg.memory.skill.autoEvolve },
-    episodic: { provider: cfg.memory.episodic.provider, url: cfg.memory.episodic.url }
+    episodic: { provider: cfg.memory.episodic.provider, url: cfg.memory.episodic.url },
+    consolidationInterval: 10,
+    maxContextTokens: 4000
   });
 
   const permissions = new DefaultPermissionSystem({
@@ -63,7 +77,8 @@ export function createAgent(options: AgentOptions = {}): AgentLoop {
   const compressor = new ContextCompressor({
     maxTokens: cfg.agent.maxTokens,
     softThreshold: 0.8,
-    preserveSystemMessages: true
+    preserveSystemMessages: true,
+    enableFuzzyDedup: true
   });
 
   return new AgentLoop({

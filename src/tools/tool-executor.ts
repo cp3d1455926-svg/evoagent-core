@@ -1,22 +1,23 @@
 /**
- * EvoAgent — 工具执行器
- * 
+ * EvoAgent — 工具执行器 v2.0
+ *
  * 统一工具调用入口，分发到具体工具实现
+ * v0.4.0: 添加 Desktop 工具
  */
 
-import type { PermissionLevel } from '../core/types.js';
 import { BashTool } from './bash.js';
 import { FileTool } from './file.js';
 import { CodeTool } from './code.js';
 import { WebTool } from './web.js';
 import { MCPTool } from './mcp-tool.js';
 import { GitTool } from './git.js';
+import { DesktopTool } from './desktop.js';
 
 export interface Tool {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-  permissionLevel: PermissionLevel;
+  permissionLevel: 'read' | 'write' | 'execute' | 'network' | 'admin';
   execute(args: Record<string, unknown>): Promise<ToolExecuteResult>;
 }
 
@@ -29,13 +30,13 @@ export class ToolExecutor {
   private tools: Map<string, Tool> = new Map();
 
   constructor() {
-    // 注册内置工具
     this.register(new BashTool());
     this.register(new FileTool());
     this.register(new CodeTool());
     this.register(new WebTool());
     this.register(new MCPTool());
     this.register(new GitTool());
+    this.register(new DesktopTool());
   }
 
   register(tool: Tool): void {

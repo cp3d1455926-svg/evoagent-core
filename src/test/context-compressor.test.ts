@@ -43,4 +43,28 @@ describe('ContextCompressor', () => {
     expect(result.originalTokenCount).toBeGreaterThan(0);
     expect(result.compressedTokenCount).toBeGreaterThan(0);
   });
+
+  it('should deduplicate similar messages with fuzzy matching', async () => {
+    const cc = new ContextCompressor({ maxTokens: 100, softThreshold: 0.5, enableFuzzyDedup: true });
+    const msgs: LLMMessage[] = [
+      { role: 'system', content: 'System prompt' },
+      { role: 'user', content: 'How do I write a TypeScript function?' },
+      { role: 'assistant', content: 'You can write a function like this...' },
+      { role: 'user', content: 'How do I write a TypeScript function?' },
+      { role: 'assistant', content: 'You can write a function like this...' },
+      { role: 'user', content: 'How do I write a TypeScript function?' },
+    ];
+    const result = await cc.compress(msgs);
+    expect(result.modified).toBe(true);
+    expect(result.messages.length).toBeLessThan(msgs.length);
+  });
+
+  it('should track compression stats', async () => {
+    const cc = new ContextCompressor({ maxTokens: 50, softThreshold: 0.5 });
+    const msgs = makeMessages(30);
+    await cc.compress(msgs);
+    const stats = cc.getStats();
+    expect(stats.totalCompressions).toBeGreaterThan(0);
+    expect(stats.totalTokensSaved).toBeGreaterThan(0);
+  });
 });

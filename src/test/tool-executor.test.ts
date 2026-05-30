@@ -11,12 +11,13 @@ describe('ToolExecutor', () => {
     expect(names).toContain('web');
     expect(names).toContain('mcp');
     expect(names).toContain('git');
+    expect(names).toContain('desktop');
   });
 
   it('should return tool definitions', () => {
     const te = new ToolExecutor();
     const defs = te.getToolDefinitions();
-    expect(defs.length).toBe(6);
+    expect(defs.length).toBe(7);
     for (const def of defs) {
       expect(def).toHaveProperty('name');
       expect(def).toHaveProperty('description');
@@ -37,6 +38,13 @@ describe('ToolExecutor', () => {
     const result = await te.execute('nonexistent', {});
     expect(result.isError).toBe(true);
     expect(result.content).toContain('not found');
+  });
+
+  it('should execute desktop system_info', async () => {
+    const te = new ToolExecutor();
+    const result = await te.execute('desktop', { action: 'system_info' });
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain('Platform');
   });
 
   it('should register custom tool', () => {
