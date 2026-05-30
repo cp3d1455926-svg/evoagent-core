@@ -10,6 +10,8 @@
  */
 
 import { Command } from 'commander';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { InteractiveCLI } from './interactive.js';
 import { runTask } from './single-task.js';
 import { startGateway } from '../gateway/server.js';
@@ -17,12 +19,21 @@ import { showStatus } from './status.js';
 import { runSetup } from './setup.js';
 import { createAgent } from './create-agent.js';
 
+/** 配置文件路径 */
+const CONFIG_DIR = join(process.env.USERPROFILE || process.env.HOME || '.', '.evoagent');
+const CONFIG_FILE = join(CONFIG_DIR, 'config.yaml');
+
+/** 检测是否为首次运行（无配置文件） */
+function isFirstRun(): boolean {
+  return !existsSync(CONFIG_FILE);
+}
+
 const program = new Command();
 
 program
   .name('evoagent')
   .description('EvoAgent — 融合 OpenClaw + Hermes + Claude Code 的 AI Agent')
-  .version('0.2.0');
+  .version('0.4.0');
 
 program
   .option('-p, --prompt <task>', '单次任务模式')
@@ -68,6 +79,21 @@ const opts = program.opts();
 const hasSubcommand = process.argv.slice(2).some(a => ['gateway', 'setup', 'status', 'plugins'].includes(a));
 
 if (!hasSubcommand) {
+  // 首次运行检测：无配置文件时自动进入配置向导
+  if (isFirstRun()) {
+    console.log('');
+    console.log('🧬 欢迎使用 EvoAgent！');
+    console.log('');
+    console.log('  检测到这是你第一次运行，需要先进行初始配置。');
+    console.log('  你也可以随时运行 evoagent setup 重新配置。');
+    console.log('');
+    await runSetup();
+    console.log('');
+    console.log('✅ 配置完成！现在可以开始使用 EvoAgent 了。');
+    console.log('  输入消息开始对话，或输入 exit 退出。');
+    console.log('');
+  }
+
   if (opts.prompt) {
     await runTask(opts.prompt, opts);
   } else {
