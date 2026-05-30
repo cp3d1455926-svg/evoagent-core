@@ -13,7 +13,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node build.js",
     "dev": "tsx watch src/cli/index.ts",
     "start": "node dist/cli/index.ts",
     "gateway": "node dist/gateway/server.js",
