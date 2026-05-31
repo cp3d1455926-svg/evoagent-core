@@ -18,6 +18,7 @@ import { startGateway } from '../gateway/server.js';
 import { showStatus } from './status.js';
 import { runSetup } from './setup.js';
 import { createAgent } from './create-agent.js';
+import { registerSkillCommands } from './skill-market.js';
 
 /** 配置文件路径 */
 const CONFIG_DIR = join(process.env.USERPROFILE || process.env.HOME || '.', '.evoagent');
@@ -74,9 +75,12 @@ program
     console.log('🔌 Plugin management - coming soon');
   });
 
+// 注册 Skill 市场命令
+registerSkillCommands(program);
+
 // 解析参数
 const opts = program.opts();
-const hasSubcommand = process.argv.slice(2).some(a => ['gateway', 'setup', 'status', 'plugins'].includes(a));
+const hasSubcommand = process.argv.slice(2).some(a => ['gateway', 'setup', 'status', 'plugins', 'skills'].includes(a));
 
 if (!hasSubcommand) {
   // 首次运行检测：无配置文件时自动进入配置向导
