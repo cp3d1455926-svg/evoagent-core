@@ -58,14 +58,21 @@ export class DefaultPermissionSystem implements PermissionSystem {
         // 沙箱模式：允许所有，但标记为沙箱执行
         return true;
 
-      case 'escalate':
-        // 高风险工具需要审批
+      case 'escalate': {
+        // 高风险工具需要审批 — 自动拒绝并提示
         const highRisk = ['bash', 'delete', 'deploy', 'database'];
         if (highRisk.includes(toolName.toLowerCase())) {
-          // TODO: 实现审批流程
+          console.warn(`🔒 Tool '${toolName}' requires manual approval in escalate mode.`);
+          console.warn(`   To allow: switch to 'bypass' mode or add to allowlist.`);
           return false;
         }
+        // 中风险工具自动批准但记录
+        const mediumRisk = ['write', 'edit', 'git', 'file'];
+        if (mediumRisk.includes(toolName.toLowerCase())) {
+          console.info(`⚠️  Medium-risk tool '${toolName}' auto-approved with logging.`);
+        }
         return true;
+      }
 
       case 'auto':
         // 基于风险评分（简化版）

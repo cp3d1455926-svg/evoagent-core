@@ -156,7 +156,10 @@ export class MemorySystem {
     // 3. 评估是否生成新技能
     await this.skill.evaluateAndLearn(conversationText, finalResponse);
 
-    // 4. 定期触发记忆巩固
+    // 4. 更新全局时间衰减基准
+    this.updateDecayFactor();
+
+    // 5. 定期触发记忆巩固
     if (this.messageCount % this.consolidationInterval === 0) {
       await this.consolidate();
     }
@@ -165,17 +168,146 @@ export class MemorySystem {
     // （KVCache 自带 TTL，无需手动清理）
   }
 
+  // ─── 时间衰减 ─────────────────────────────────────
+
+  /** 全局衰减因子（每日递减 5%，每次 solidify 更新） */
+  private decayFactor = 1.0;
+
+  private updateDecayFactor(): void {
+    // 每 20 次会话缓慢衰减，但不低于 0.5
+    this.decayFactor = Math.max(0.5, this.decayFactor - 0.005);
+  }
+
   /**
-   * 记忆巩固 — 定期整理记忆
-   * - 移除低重要性记忆
-   * - 合并相似记忆
-   * - 压缩存储
+   * 记忆巩固 v3.0 — 定期整理记忆
+   * - 时间衰减（旧记忆优先级降低）
+   * - 聚类合并（Jaccard > 0.6 的记忆合并为摘要）
+   * - 知识图谱节点提取
+   * - 低重要性 + 低访问清理
    */
   async consolidate(): Promise<void> {
-    // 这里可以实现更复杂的巩固逻辑
-    // 例如：使用 LLM 对记忆进行摘要、去重、关联等
-    // 当前版本：清除低频访问的记忆
-    // TODO: 实现 LLM 驱动的自动摘要
+    const allMemories = this.longTerm.getAll();
+    if (allMemories.length === 0) return;
+
+    // ─── 阶段 1: 评分 + 过滤 ────────────────────────
+    const scored: Array<{ entry: typeof allMemories[0]; importance: number }> = [];
+
+    for (const mem of allMemories) {
+      let importance = this.scoreImportance(mem.content, mem.content);
+
+      // 时间衰减：越旧的记忆权重越低
+      const ageDays = (Date.now() - mem.timestamp) / (24 * 60 * 60 * 1000);
+      const timePenalty = Math.max(0, 1 - ageDays * 0.05); // 每天降 5%
+      importance *= timePenalty;
+
+      // 访问次数惩罚：无人问津的记忆降低权重
+      const accessBonus = Math.min(mem.accessCount * 0.05, 0.3);
+      importance += accessBonus;
+
+      // 全局衰减因子
+      importance *= this.decayFactor;
+
+      scored.push({ entry: mem, importance });
+    }
+
+    // ─── 阶段 2: 聚类合并 ──────────────────────────
+    const merged: Array<{ content: string; importance: number }> = [];
+    const seen = new Set<number>();
+
+    for (let i = 0; i < scored.length; i++) {
+      if (seen.has(i)) continue;
+      const clusterItems: Array<{ content: string; importance: number }> = [{
+        content: scored[i].entry.content,
+        importance: scored[i].importance
+      }];
+      const tokensI = this.tokenize(scored[i].entry.content);
+
+      for (let j = i + 1; j < scored.length; j++) {
+        if (seen.has(j)) continue;
+        const tokensJ = this.tokenize(scored[j].entry.content);
+        if (this.jaccard(tokensI, tokensJ) > 0.6) {
+          clusterItems.push({
+            content: scored[j].entry.content,
+            importance: scored[j].importance
+          });
+          seen.add(j);
+        }
+      }
+
+      // 从聚类中选出最佳记忆
+      if (clusterItems.length === 1) {
+        if (clusterItems[0].importance >= 0.2) {
+          merged.push(clusterItems[0]);
+        }
+      } else {
+        // 多个相似记忆：保留最高分的那条
+        clusterItems.sort((a, b) => b.importance - a.importance);
+        merged.push(clusterItems[0]);
+      }
+    }
+
+    // ─── 阶段 3: 知识图谱提取 ──────────────────────
+    const knowledgeGraph = this.extractKnowledgeGraph(merged.map(m => m.content));
+    if (knowledgeGraph.length > 0) {
+      // 将知识图谱节点作为高优先级记忆注入
+      for (const node of knowledgeGraph) {
+        merged.push({ content: node, importance: 0.85 });
+      }
+    }
+
+    // ─── 阶段 4: 重建 ──────────────────────────────
+    this.longTerm.clear();
+    for (const mem of merged) {
+      await this.longTerm.store(mem.content);
+    }
+  }
+
+  /**
+   * 知识图谱提取 — 从记忆集合中发现知识节点
+   * 检测形如 "A 是 B" / "A 使用 B" / "A 依赖 B" 的关系
+   */
+  private extractKnowledgeGraph(memories: string[]): string[] {
+    const nodes: string[] = [];
+
+    // 关系模式
+    const relationPatterns = [
+      /(.{2,30})(?:是|属于|表示)(.{2,30})/g,
+      /(.{2,30})(?:使用|依赖|基于|采用)(.{2,30})/g,
+      /(.{2,30})(?:提供|支持|包含)(.{2,30})/g,
+      /(.{2,30})(?:连接|关联|集成)(.{2,30})/g,
+    ];
+
+    for (const memory of memories) {
+      for (const pat of relationPatterns) {
+        let m: RegExpExecArray | null;
+        while ((m = pat.exec(memory)) !== null) {
+          const subject = m[1].trim();
+          const object = m[2].trim();
+          if (subject.length >= 2 && object.length >= 2) {
+            nodes.push(`知识: ${subject} → ${object}`);
+          }
+        }
+      }
+    }
+
+    return [...new Set(nodes)]; // 去重
+  }
+
+  private tokenize(text: string): Set<string> {
+    return new Set(
+      text.toLowerCase()
+        .replace(/[^\w\u4e00-\u9fff\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 2)
+    );
+  }
+
+  private jaccard(a: Set<string>, b: Set<string>): number {
+    if (a.size === 0 || b.size === 0) return 0;
+    let intersection = 0;
+    for (const item of a) { if (b.has(item)) intersection++; }
+    const union = a.size + b.size - intersection;
+    return union > 0 ? intersection / union : 0;
   }
 
   /**

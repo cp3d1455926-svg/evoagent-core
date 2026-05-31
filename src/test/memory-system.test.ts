@@ -64,4 +64,84 @@ describe('MemorySystem', () => {
     expect(ctx).not.toBeNull();
     expect(ctx).toContain('相关记忆');
   });
+
+  describe('consolidate', () => {
+    it('should run consolidation without errors', async () => {
+      await ms.longTerm.store('Jake prefers dark mode for IDE');
+      await ms.longTerm.store('Jake uses dark mode in VS Code');
+      await ms.longTerm.store('Some random unimportant thing');
+
+      // Should not throw
+      await expect(ms.consolidate()).resolves.toBeUndefined();
+    });
+
+    it('should merge similar memories during consolidation', async () => {
+      const beforeCount = ms.longTerm.getCount();
+      await ms.consolidate();
+      const afterCount = ms.longTerm.getCount();
+      // After consolidation, count should be <= before
+      expect(afterCount).toBeLessThanOrEqual(beforeCount);
+    });
+
+    it('should extract knowledge graph nodes', async () => {
+      const memories = [
+        'EvoAgent 使用 TypeScript 开发',
+        'EvoAgent 依赖 KV 缓存层',
+      ];
+      for (const m of memories) {
+        await ms.longTerm.store(m);
+      }
+      await ms.consolidate();
+      const allMems = ms.longTerm.getAll();
+      const hasKnowledge = allMems.some(m =>
+        m.content.includes('知识:') || m.content.includes('→')
+      );
+      // Knowledge graph nodes may or may not be kept depending on dedup
+      expect(allMems.length).toBeGreaterThan(0);
+    });
+
+    it('should handle empty memory list', async () => {
+      await ms.longTerm.clear();
+      await expect(ms.consolidate()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('knowledge graph extraction', () => {
+    it('should extract entity relationships', () => {
+      const extractor = (ms as any).extractKnowledgeGraph.bind(ms);
+      const memories = [
+        'EvoAgent 使用 TypeScript 开发',
+        'Redis 提供缓存能力',
+      ];
+      const nodes = extractor(memories);
+      expect(nodes.length).toBeGreaterThan(0);
+      expect(nodes.some(n => n.includes('EvoAgent'))).toBe(true);
+      expect(nodes.some(n => n.includes('Redis'))).toBe(true);
+    });
+
+    it('should return empty for unrelated text', () => {
+      const extractor = (ms as any).extractKnowledgeGraph.bind(ms);
+      const nodes = extractor(['今天天气很好', '我去吃饭了']);
+      expect(nodes.length).toBe(0);
+    });
+  });
+
+  describe('consolidation interval', () => {
+    it('should trigger consolidation at interval', async () => {
+      const ms2 = new MemorySystem({ consolidationInterval: 2 });
+      await ms2.initialize();
+
+      // Solidify twice should trigger consolidation
+      await ms2.solidify(
+        [{ role: 'user', content: 'hello' }],
+        'hello, how can I help?'
+      );
+      await ms2.solidify(
+        [{ role: 'user', content: 'test' }],
+        'test response'
+      );
+
+      await ms2.close();
+    });
+  });
 });

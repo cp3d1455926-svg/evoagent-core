@@ -187,6 +187,11 @@ export class LongTermMemory {
     return this.memories.length;
   }
 
+  /** 获取所有记忆（用于巩固） */
+  getAll(): MemoryEntry[] {
+    return [...this.memories];
+  }
+
   /** 清除所有记忆 */
   async clear(): Promise<void> {
     this.memories = [];

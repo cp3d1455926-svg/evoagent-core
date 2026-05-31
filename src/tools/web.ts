@@ -260,36 +260,77 @@ export class WebTool implements Tool {
 
   private async searchDuckDuckGo(query: string, maxResults: number): Promise<ToolExecuteResult> {
     const encoded = encodeURIComponent(query);
-    const res = await fetch(
-      `https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`,
-      { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(15000) }
-    );
 
-    if (!res.ok) throw new Error(`DuckDuckGo API ${res.status}`);
+    // 方法 1: 官方 Instant Answer API
+    try {
+      const res = await fetch(
+        `https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`,
+        { headers: { 'Accept': 'application/json', 'User-Agent': 'EvoAgent/0.4.1' }, signal: AbortSignal.timeout(15000) }
+      );
 
-    const data = await res.json() as {
-      AbstractText?: string; AbstractURL?: string;
-      RelatedTopics?: Array<{ Text?: string; FirstURL?: string }>;
-      Results?: Array<{ Text?: string; FirstURL?: string }>;
-    };
+      if (res.ok) {
+        const data = await res.json() as {
+          AbstractText?: string; AbstractURL?: string;
+          RelatedTopics?: Array<{ Text?: string; FirstURL?: string }>;
+          Results?: Array<{ Text?: string; FirstURL?: string }>;
+        };
 
-    const parts: string[] = [];
-    if (data.AbstractText) {
-      parts.push(`📋 ${data.AbstractText}`);
-      if (data.AbstractURL) parts.push(`🔗 ${data.AbstractURL}`);
-    }
-    const topics = data.RelatedTopics ?? data.Results ?? [];
-    let count = 0;
-    for (const topic of topics) {
-      if (count >= maxResults) break;
-      if (topic.Text) {
-        parts.push(`\n${count + 1}. ${topic.Text}`);
-        if (topic.FirstURL) parts.push(`   ${topic.FirstURL}`);
-        count++;
+        const parts: string[] = [];
+        if (data.AbstractText) {
+          parts.push(`📋 ${data.AbstractText}`);
+          if (data.AbstractURL) parts.push(`🔗 ${data.AbstractURL}`);
+        }
+        const topics = data.RelatedTopics ?? data.Results ?? [];
+        let count = 0;
+        for (const topic of topics) {
+          if (count >= maxResults) break;
+          if (topic.Text) {
+            parts.push(`\n${count + 1}. ${topic.Text}`);
+            if (topic.FirstURL) parts.push(`   ${topic.FirstURL}`);
+            count++;
+          }
+        }
+
+        if (parts.length > 0) {
+          return { content: parts.join('\n'), isError: false };
+        }
       }
-    }
+    } catch { /* 方法 1 失败，尝试方法 2 */ }
 
-    return { content: parts.join('\n') || 'No results', isError: false };
+    // 方法 2: HTML 页面解析（降级）
+    try {
+      const res = await fetch(
+        `https://html.duckduckgo.com/html/?q=${encoded}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, signal: AbortSignal.timeout(15000) }
+      );
+      if (res.ok) {
+        const html = await res.text();
+        const results: Array<{ title: string; url: string; snippet: string }> = [];
+        // 简单正则提取搜索结果
+        const resultRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi;
+        const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>/gi;
+        let match;
+        const urls: string[] = [];
+        const titles: string[] = [];
+        while ((match = resultRegex.exec(html)) !== null) {
+          urls.push(match[1]);
+          titles.push(match[2].replace(/<[^>]+>/g, ''));
+        }
+        const snippets: string[] = [];
+        while ((match = snippetRegex.exec(html)) !== null) {
+          snippets.push(match[1].replace(/<[^>]+>/g, ''));
+        }
+        for (let i = 0; i < Math.min(maxResults, urls.length); i++) {
+          results.push({ title: titles[i] || '', url: urls[i], snippet: snippets[i] || '' });
+        }
+        if (results.length > 0) {
+          const parts = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.snippet.slice(0, 200)}\n   🔗 ${r.url}`);
+          return { content: `🔍 DuckDuckGo (HTML fallback) results for: "${query}"\n\n${parts.join('\n\n')}`, isError: false };
+        }
+      }
+    } catch { /* 方法 2 也失败 */ }
+
+    throw new Error('DuckDuckGo search failed: both API and HTML fallback unavailable');
   }
 
   // ─── 智能网页抓取 ────────────────────────────────────

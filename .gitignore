@@ -25,3 +25,14 @@ coverage/
 # Temp
 tmp/
 temp/
+
+# Exam / practice scripts
+exam-*.mjs
+clawvard-*.mjs
+practice*.mjs
+sbti-test.mjs
+confirm*.js
+confirm*.ps1
+test-git.mjs
+clawvard-token*.txt
+asvp-*.mjs

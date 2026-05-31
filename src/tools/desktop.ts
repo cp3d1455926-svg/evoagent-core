@@ -123,34 +123,42 @@ export class DesktopTool implements Tool {
     await mkdir(tmpDir, { recursive: true });
     const filePath = join(tmpDir, `screenshot-${Date.now()}.png`);
 
-    switch (platform) {
-      case 'win32': {
-        // 使用 PowerShell 截屏
-        const psCmd = `
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-$b = [System.Windows.Forms.Screen]::PrimaryScreen
-$bounds = $b.Bounds
-$bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-$graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-$bitmap.Save('${filePath.replace(/\\/g, '\\\\')}')
-$graphics.Dispose()
-$bitmap.Dispose()
-`;
-        await execAsync(`powershell -Command "${psCmd.replace(/\n/g, ' ')}"`, { timeout: 15000 });
-        break;
+    let screenshotSuccess = false;
+    let lastError = '';
+
+    // 尝试平台原生截图
+    try {
+      switch (platform) {
+        case 'win32': {
+          // 方法 1: PowerShell + .NET（最可靠）
+          const psCmd = `Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen; $bounds = $b.Bounds; $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height); $graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); $bitmap.Save('${filePath.replace(/\\/g, '\\')}'); $graphics.Dispose(); $bitmap.Dispose()`;
+          await execAsync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 15000 });
+          if (require('fs').existsSync(filePath)) { screenshotSuccess = true; }
+          break;
+        }
+        case 'darwin': {
+          await execAsync(`screencapture -x "${filePath}"`, { timeout: 10000 });
+          if (require('fs').existsSync(filePath)) { screenshotSuccess = true; }
+          break;
+        }
+        default: {
+          await execAsync(`gnome-screenshot -f "${filePath}" 2>/dev/null || scrot "${filePath}" 2>/dev/null || import -window root "${filePath}"`, { timeout: 10000 });
+          if (require('fs').existsSync(filePath)) { screenshotSuccess = true; }
+        }
       }
-      case 'darwin': {
-        await execAsync(`screencapture -x "${filePath}"`, { timeout: 10000 });
-        break;
-      }
-      default: {
-        await execAsync(`gnome-screenshot -f "${filePath}" 2>/dev/null || import -window root "${filePath}"`, { timeout: 10000 });
-      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
     }
 
-    return { content: `📸 Screenshot saved: ${filePath}`, isError: false };
+    if (screenshotSuccess) {
+      return { content: `📸 Screenshot saved: ${filePath}`, isError: false };
+    }
+
+    // 降级：返回系统信息代替截图
+    return {
+      content: `⚠️ Screenshot failed (${lastError}). Screenshot requires GUI environment.\n\n${this.systemInfo(platform).content}`,
+      isError: false
+    };
   }
 
   // ─── 剪贴板 ──────────────────────────────────────────

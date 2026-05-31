@@ -169,12 +169,22 @@ export class KVCache<T = unknown> {
   // ─── 内部方法 ─────────────────────────────────────
 
   private tokenize(text: string): Set<string> {
-    return new Set(
-      text.toLowerCase()
-        .replace(/[^\w\u4e00-\u9fff\s]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length >= 2)
-    );
+    const tokens = new Set<string>();
+
+    // 英文/数字词
+    const words = text.toLowerCase()
+      .replace(/[^\w\u4e00-\u9fff\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 2);
+    for (const w of words) tokens.add(w);
+
+    // 中文双字组合（提升中文模糊匹配效果）
+    const chineseChars = text.replace(/[^\u4e00-\u9fff]/g, '');
+    for (let i = 0; i < chineseChars.length - 1; i++) {
+      tokens.add(chineseChars.slice(i, i + 2));
+    }
+
+    return tokens;
   }
 
   private jaccardSimilarity(a: Set<string>, b: Set<string>): number {

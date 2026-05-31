@@ -4,8 +4,9 @@
  * 读取、写入、编辑、删除文件
  */
 
-import { readFile, writeFile, unlink, access } from 'fs/promises';
+import { readFile, writeFile, unlink, access, mkdir } from 'fs/promises';
 import { constants } from 'fs';
+import { dirname } from 'path';
 import type { Tool, ToolExecuteResult } from './tool-executor.js';
 
 type FileAction = 'read' | 'write' | 'edit' | 'delete';
@@ -49,6 +50,8 @@ export class FileTool implements Tool {
           if (content === undefined) {
             return { content: 'Error: "content" is required for write action', isError: true };
           }
+          // Auto-create parent directories
+          try { await mkdir(dirname(path), { recursive: true }); } catch { /* dir may already exist */ }
           await writeFile(path, content, 'utf-8');
           return { content: `File written: ${path}`, isError: false };
         }

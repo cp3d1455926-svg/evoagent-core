@@ -2,10 +2,14 @@
 
 > 融合 OpenClaw 架构、Hermes 记忆系统与 Claude Code 代码能力的 AI Agent
 
+[![CI](https://github.com/cp3d1455926-svg/evoagent-core/actions/workflows/ci.yml/badge.svg)](https://github.com/cp3d1455926-svg/evoagent-core/actions/workflows/ci.yml)
+![Test Count](https://img.shields.io/badge/tests-130%20passed-brightgreen)
+![Version](https://img.shields.io/badge/version-0.5.0-blue)
+
 ## 安装
 
 ```bash
-npm install evoagent-core@0.3.0
+npm install evoagent-core
 ```
 
 可选依赖（用于 SQLite 持久化）：
@@ -227,6 +231,48 @@ await MemoryImporter.fromSQLite('./old-agent.db', agent.memory);
 // 从 CSV 迁移
 await MemoryImporter.fromCSV('./memories.csv', agent.memory);
 ```
+
+## 📋 更新日志
+
+### v0.5.0 (2026-05-31)
+
+**测试覆盖**
+- KV 缓存层测试：21 个测试（含 LRU 淘汰、TTL 过期、模糊匹配、中文支持）
+- Code Tool 测试：22 个测试（代码分析、测试生成、语言检测、质量评分）
+- Bash Tool 测试：16 个测试（基础执行、安全拦截、超时、输出截断、流式）
+- Web Tool 测试：12 个测试（真实搜索验证、内容提取、多引擎并发）
+- 记忆系统测试：15 个测试（巩固、知识图谱、聚类合并、时间衰减）
+- **总计：130 个测试，12 个测试文件，全部通过 ✅**
+
+**记忆系统升级**
+- 时间衰减机制：旧记忆权重每日降 5%
+- 知识图谱提取：自动发现实体关系（A→B）
+- 聚类合并：相似记忆（Jaccard > 0.6）自动聚类保留最佳
+- 访问计数奖励：常用记忆保留优先级提升
+- 修复 `consolidate()` 中 `this.longTermMemory` → `this.longTerm` 的 bug
+
+**CI/CD**
+- 新增 GitHub Actions 流水线：Lint → Test → Build → Coverage → Release
+- 支持自动 npm publish（tag 触发）
+- 测试覆盖报告上传
+
+**KV 缓存增强**
+- Tokenizer 增加中文双字切分，提升中文模糊匹配效果
+- 修复 `build.js` 可能遗漏 `kv-cache.ts` 的问题
+
+### v0.4.1 (2026-05-30)
+- esbuild 编译替代 tsc（编译速度提升 10x）
+- 首次运行配置向导
+- Bug 修复
+
+### v0.4.0 (2026-05-30)
+- KV 缓存层：LLM 响应 + 工具结果 + 记忆检索缓存
+- 多引擎搜索：Tavily / Serper / Bing / DuckDuckGo
+- 代码质量评分 + 测试生成
+- 智能上下文压缩
+- 记忆增强：语义缓存 + 重要性评分
+- Desktop 工具：操控电脑
+- Bash 增强：流式输出 + 安全拦截
 
 ## 许可证
 

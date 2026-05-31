@@ -56,16 +56,26 @@ export class BashTool implements Tool {
     } = args as unknown as BashArgs;
 
     // 安全检查：拒绝危险命令
-    const dangerousPatterns = [
-      /rm\s+-rf\s+\//, /rm\s+-rf\s+~/, /rm\s+-rf\s+\*/,
-      /format\s+/, /mkfs\./, /dd\s+if=/,
-      />\s*\/dev\//, /shutdown\s+/, /reboot\s+/,
-      /chmod\s+-R\s+777\s+\//,
+    const dangerousPatterns: Array<{ pattern: RegExp; reason: string }> = [
+      { pattern: /rm\s+-rf\s+[\/~]/, reason: 'Recursive delete of root/home' },
+      { pattern: /rm\s+-rf\s+\*/, reason: 'Recursive delete with wildcard' },
+      { pattern: /format\s+[a-z]:/i, reason: 'Disk format' },
+      { pattern: /mkfs\./, reason: 'Filesystem creation' },
+      { pattern: /dd\s+if=.*of=\/dev/i, reason: 'Direct disk write' },
+      { pattern: />\s*\/dev\/(sda|hda|nvme|disk)/, reason: 'Writing to raw disk' },
+      { pattern: /shutdown\s+/, reason: 'System shutdown' },
+      { pattern: /reboot\s+/, reason: 'System reboot' },
+      { pattern: /chmod\s+-R\s+777\s+\//, reason: 'Recursive chmod 777 on root' },
+      { pattern: /curl\s+.*\|\s*(ba)?sh/, reason: 'Pipe from curl to shell (remote code execution)' },
+      { pattern: /wget\s+.*\|\s*(ba)?sh/, reason: 'Pipe from wget to shell (remote code execution)' },
+      { pattern: /sudo\s+rm\s+-rf/, reason: 'Sud recursive delete' },
+      { pattern: /mkfs|fdisk|parted/, reason: 'Disk partitioning tools' },
+      { pattern: /:(){ :|:& };:/, reason: 'Fork bomb' },
     ];
-    for (const pat of dangerousPatterns) {
-      if (pat.test(command)) {
+    for (const { pattern, reason } of dangerousPatterns) {
+      if (pattern.test(command)) {
         return {
-          content: `🚫 Dangerous command blocked by safety check: ${command}\nPattern matched: ${pat.toString()}`,
+          content: `🚫 Dangerous command blocked: ${reason}\nCommand: ${command}`,
           isError: true
         };
       }

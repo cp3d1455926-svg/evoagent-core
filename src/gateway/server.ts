@@ -28,7 +28,7 @@ import { Logger } from '../telemetry/logger.js';
 import { MetricsCollector, MetricNames } from '../telemetry/metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const VERSION = '0.2.0';
+const VERSION = '0.4.1';
 
 // ─── 会话类型 ─────────────────────────────────────────
 interface Session {
@@ -160,6 +160,15 @@ export async function startGateway(
   const wsClients = new Map<WebSocket, WSClient>();
 
   app.use(express.json());
+
+  // ─── CORS ───────────────────────────────────────────
+  app.use((_req, res, next) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (_req.method === 'OPTIONS') { res.status(204).end(); return; }
+    next();
+  });
 
   // ─── 速率限制中间件 ─────────────────────────────────
   const rateLimitMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
