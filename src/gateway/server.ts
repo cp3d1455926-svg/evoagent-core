@@ -28,7 +28,7 @@ import { Logger } from '../telemetry/logger.js';
 import { MetricsCollector, MetricNames } from '../telemetry/metrics.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const VERSION = '0.4.1';
+const VERSION = '0.5.0';
 
 // ─── 会话类型 ─────────────────────────────────────────
 interface Session {

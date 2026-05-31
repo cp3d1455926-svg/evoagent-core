@@ -2,7 +2,7 @@
  * EvoAgent — 工具执行器 v2.0
  *
  * 统一工具调用入口，分发到具体工具实现
- * v0.4.0: 添加 Desktop 工具
+ * v0.5.0: 添加 Desktop 工具
  */
 
 import { BashTool } from './bash.js';
@@ -12,6 +12,8 @@ import { WebTool } from './web.js';
 import { MCPTool } from './mcp-tool.js';
 import { GitTool } from './git.js';
 import { DesktopTool } from './desktop.js';
+import { WorkspaceTool } from './workspace.js';
+import { SkillTool } from './skill-tool.js';
 
 export interface Tool {
   name: string;
@@ -37,6 +39,8 @@ export class ToolExecutor {
     this.register(new MCPTool());
     this.register(new GitTool());
     this.register(new DesktopTool());
+    this.register(new WorkspaceTool());
+    this.register(new SkillTool());
   }
 
   register(tool: Tool): void {

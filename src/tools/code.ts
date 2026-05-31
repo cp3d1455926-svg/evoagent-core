@@ -1,7 +1,7 @@
 /**
  * EvoAgent — Code Tool v2.0
  *
- * v0.4.0: AST-aware analysis, test generation, quality scoring, project mapping
+ * v0.5.0: AST-aware analysis, test generation, quality scoring, project mapping
  */
 
 import { readFile, readdir, stat } from 'fs/promises';

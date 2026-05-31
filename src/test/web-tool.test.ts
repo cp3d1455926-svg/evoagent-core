@@ -2,7 +2,7 @@
  * EvoAgent — Web Tool 测试
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { WebTool } from '../tools/web';
+import { WebTool } from '../tools/web.js';
 
 describe('WebTool', () => {
   let tool: WebTool;

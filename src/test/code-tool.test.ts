@@ -2,7 +2,7 @@
  * EvoAgent — Code Tool 测试
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CodeTool } from '../tools/code';
+import { CodeTool } from '../tools/code.js';
 
 const SAMPLE_TS = `
 import { describe, it, expect } from 'vitest';

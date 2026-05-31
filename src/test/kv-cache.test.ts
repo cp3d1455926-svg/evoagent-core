@@ -2,7 +2,7 @@
  * EvoAgent — KV 缓存层测试
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { KVCache } from '../core/kv-cache';
+import { KVCache } from '../core/kv-cache.js';
 
 describe('KVCache', () => {
   let cache: KVCache<string>;

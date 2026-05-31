@@ -115,8 +115,8 @@ describe('MemorySystem', () => {
       ];
       const nodes = extractor(memories);
       expect(nodes.length).toBeGreaterThan(0);
-      expect(nodes.some(n => n.includes('EvoAgent'))).toBe(true);
-      expect(nodes.some(n => n.includes('Redis'))).toBe(true);
+      expect(nodes.some((n: string) => n.includes('EvoAgent'))).toBe(true);
+      expect(nodes.some((n: string) => n.includes('Redis'))).toBe(true);
     });
 
     it('should return empty for unrelated text', () => {

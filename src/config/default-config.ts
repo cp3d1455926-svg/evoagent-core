@@ -5,7 +5,7 @@
 export const defaultConfig = {
   agent: {
     name: 'EvoAgent',
-    version: '0.4.0',
+    version: '0.5.0',
     model: 'LongCat-2.0-Preview',
     maxTokens: 128000,
     thinkingMode: false,

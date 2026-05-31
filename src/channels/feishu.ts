@@ -1,11 +1,14 @@
 /* eslint-disable no-console */
 /**
- * EvoAgent — 飞书渠道适配器
- * 
+ * EvoAgent — 飞书渠道适配器 v0.5.0
+ *
  * 通过飞书开放平台 API 接收和发送消息
  * 支持 WebSocket 长连接模式（无需公网回调地址）
- * 
+ *
  * 依赖: @larksuiteoapi/node-sdk
+ *
+ * 注意：@larksuiteoapi/node-sdk v1.65+
+ * WSClient 使用 EventDispatcher 注册事件，而不是 .on() 方法
  */
 
 import type { Channel } from './base.js';
@@ -48,32 +51,36 @@ export class FeishuChannel implements Channel {
     this.messageHandler = onMessage;
 
     try {
-      // 动态导入飞书 SDK
-      const { Client, WSClient } = await import('@larksuiteoapi/node-sdk');
+      const sdk = await import('@larksuiteoapi/node-sdk');
 
-      // 创建 API 客户端
-      this.client = new Client({
+      // 创建 API 客户端（用于发送消息）
+      this.client = new sdk.Client({
         appId: this.config.appId,
         appSecret: this.config.appSecret,
-        appType: 0,  // AppType.SelfBuild
-        domain: this.config.domain === 'lark' ? 1 : 0,  // Domain.Lark : Domain.Feishu
+        appType: sdk.AppType?.SelfBuild ?? 0,
+        domain: this.config.domain === 'lark' ? sdk.Domain?.Lark ?? 1 : sdk.Domain?.Feishu ?? 0,
+      });
+
+      // 创建事件分发器
+      const eventDispatcher = new sdk.EventDispatcher({
+        encryptKey: this.config.encryptKey || '',
+        verificationToken: this.config.verificationToken || '',
+      }).register({
+        'im.message.receive_v1': async (data: any) => {
+          this.handleMessage(data);
+        },
       });
 
       // 创建 WebSocket 客户端（长连接模式）
-      this.wsClient = new WSClient({
+      this.wsClient = new sdk.WSClient({
         appId: this.config.appId,
         appSecret: this.config.appSecret,
         domain: this.config.domain === 'lark' ? 'lark' : 'feishu',
-        loggerLevel: 2,  // LoggerLevel.warn
+        loggerLevel: sdk.LoggerLevel?.warn ?? 2,
       });
 
-      // 注册消息事件处理器
-      this.wsClient.on('im.message.receive_v1', (data: any) => {
-        this.handleMessage(data);
-      });
-
-      // 启动 WebSocket 连接
-      await this.wsClient.start();
+      // 启动 WebSocket 连接（传入事件分发器）
+      await this.wsClient.start({ eventDispatcher });
       this.ready = true;
       console.log('🐦 Feishu channel started (WebSocket mode)');
 
@@ -109,7 +116,6 @@ export class FeishuChannel implements Channel {
 
       // 群聊中检查是否需要 @提及
       if (this.config.requireMention && message.chat_type === 'group') {
-        // 如果消息中没有 @机器人，忽略
         const mentions = message.mentions || [];
         const botMentioned = mentions.some((m: any) => m.is_bot);
         if (!botMentioned) return;
@@ -227,7 +233,6 @@ export class FeishuChannel implements Channel {
   async stop(): Promise<void> {
     try {
       if (this.wsClient) {
-        // WSClient 没有显式 stop 方法，断开即可
         this.wsClient = null;
       }
       this.client = null;

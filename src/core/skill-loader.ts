@@ -1,7 +1,8 @@
 /**
- * EvoAgent — Skill 运行时
+ * EvoAgent — Skill 运行时 v0.5.0
  *
  * 从 skills/ 目录加载 SKILL.md，注册、搜索、调用 Skill
+ * 新增：Skill 完整性校验 + 热重载
  */
 
 export interface SkillDefinition {
@@ -21,6 +22,12 @@ export interface SkillSearchResult {
   skill: SkillDefinition;
   score: number;
   matchedFields: string[];
+}
+
+export interface SkillValidation {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 export class SkillLoader {
@@ -76,8 +83,10 @@ export class SkillLoader {
     let author = '';
     let tags: string[] = [];
 
+    let bodyStart = 0;
     if (fmMatch) {
       const fm = fmMatch[1];
+      bodyStart = fmMatch[0].length;
       const nameMatch = fm.match(/^name:\s*(.+)/m);
       if (nameMatch) name = nameMatch[1].trim().replace(/^["']|["']$/g, '');
       const descMatch = fm.match(/^description:\s*(.+)/m);
@@ -92,9 +101,10 @@ export class SkillLoader {
       }
     }
 
-    // 如果没有 frontmatter，从内容提取描述
+    // 如果 frontmatter 没有 description，从正文提取第一行非标题内容
     if (!description) {
-      const lines = content.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+      const body = content.slice(bodyStart).trim();
+      const lines = body.split('\n').filter(l => l.trim() && !l.startsWith('#'));
       if (lines.length > 0) {
         description = lines[0].slice(0, 120);
       }
@@ -216,6 +226,78 @@ export class SkillLoader {
     const skill = this.skills.get(slug);
     if (!skill || !skill.enabled) return null;
     return `# Skill: ${skill.name}\n\n${skill.markdown}`;
+  }
+
+  /**
+   * 验证已安装的 Skill 完整性
+   */
+  validate(slug?: string): SkillValidation {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    const skills = slug ? [this.get(slug)].filter(Boolean) as SkillDefinition[] : this.getAll();
+
+    for (const skill of skills) {
+      const fmMatch = skill.markdown.match(/^---\s*\n([\s\S]*?)\n---/);
+      if (!fmMatch) {
+        errors.push(`[${skill.slug}] Missing frontmatter in SKILL.md`);
+      } else {
+        const fm = fmMatch[1];
+        if (!fm.match(/^name:\s*(.+)/m)) errors.push(`[${skill.slug}] Missing "name" in frontmatter`);
+        if (!fm.match(/^description:\s*(.+)/m)) warnings.push(`[${skill.slug}] Missing "description" in frontmatter`);
+        if (!fm.match(/^version:\s*(.+)/m)) warnings.push(`[${skill.slug}] Missing "version" in frontmatter`);
+      }
+
+      if (skill.markdown.trim().length < 50) {
+        warnings.push(`[${skill.slug}] SKILL.md is very short (< 50 chars)`);
+      }
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  /**
+   * 热重载：监听 skills 目录变化
+   */
+  async watch(intervalMs: number = 5000): Promise<void> {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+
+    let lastMtime = Date.now();
+
+    const poll = async () => {
+      try {
+        const entries = await fs.readdir(this.skillsDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const skillMdPath = path.join(this.skillsDir, entry.name, 'SKILL.md');
+          try {
+            const stat = await fs.stat(skillMdPath);
+            const mtime = (stat as any).mtimeMs ?? (stat as any).mtime?.getTime() ?? Date.now();
+            if (mtime > lastMtime) {
+              lastMtime = mtime;
+              await this.loadAll();
+              return true;
+            }
+          } catch {
+            // dir removed
+          }
+        }
+      } catch {
+        // skills dir doesn't exist
+      }
+      return false;
+    };
+
+    return new Promise<void>((resolve) => {
+      const timer = setInterval(async () => {
+        const changed = await poll();
+        if (changed) {
+          resolve();
+          clearInterval(timer);
+        }
+      }, intervalMs);
+    });
   }
 
   /**

@@ -7,7 +7,7 @@
  * 3. 记忆检索缓存 — 相似查询复用检索结果
  * 4. TTL 过期 + LRU 淘汰
  *
- * v0.4.0: 新增缓存层
+ * v0.5.0: 新增缓存层
  */
 
 export interface CacheEntry<T> {

@@ -2,7 +2,7 @@
  * EvoAgent — Agent 工厂 v2.0
  *
  * 统一创建配置好的 AgentLoop 实例
- * v0.4.0 改进：
+ * v0.5.0 改进：
  * - 集成 KV 缓存
  * - Token 预算控制
  * - 增强记忆配置

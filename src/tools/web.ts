@@ -2,7 +2,7 @@
  * EvoAgent — Web 工具 v2.0
  *
  * 多引擎网络搜索 + 智能网页抓取
- * v0.4.0 改进：
+ * v0.5.0 改进：
  * - 多搜索引擎：Tavily / Serper / Bing / DuckDuckGo
  * - 搜索结果缓存
  * - 智能内容提取（Readability 算法）

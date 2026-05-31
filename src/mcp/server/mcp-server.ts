@@ -26,7 +26,7 @@ export class EvoMCPServer {
     this.config = config;
     this.server = new Server({
       name: 'evoagent-mcp-server',
-      version: '0.4.1'
+      version: '0.5.0'
     }, {
       capabilities: {
         tools: {}

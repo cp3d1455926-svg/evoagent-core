@@ -1,4 +1,4 @@
-// EvoAgent — 核心导出 v0.4.0
+// EvoAgent — 核心导出 v0.5.0
 
 export { AgentLoop } from './core/agent-loop.js';
 export { createAgent } from './cli/create-agent.js';

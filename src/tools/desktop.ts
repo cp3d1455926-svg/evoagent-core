@@ -2,7 +2,7 @@
  * EvoAgent — Desktop 工具
  *
  * 操控用户电脑：打开应用/文件/URL、截图、剪贴板、系统信息
- * v0.4.0: 新增桌面控制能力
+ * v0.5.0: 新增桌面控制能力
  *
  * 安全说明：
  * - 所有操作需要用户确认（permission system 控制）
@@ -12,8 +12,10 @@
 
 import { exec, execSync } from 'child_process';
 import { promisify } from 'util';
+import { existsSync } from 'fs';
 import { writeFile, readFile, mkdir } from 'fs/promises';
 import { join } from 'path';
+import * as os from 'os';
 import type { Tool, ToolExecuteResult } from './tool-executor.js';
 
 const execAsync = promisify(exec);
@@ -133,17 +135,17 @@ export class DesktopTool implements Tool {
           // 方法 1: PowerShell + .NET（最可靠）
           const psCmd = `Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen; $bounds = $b.Bounds; $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height); $graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); $bitmap.Save('${filePath.replace(/\\/g, '\\')}'); $graphics.Dispose(); $bitmap.Dispose()`;
           await execAsync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 15000 });
-          if (require('fs').existsSync(filePath)) { screenshotSuccess = true; }
+          if (existsSync(filePath)) { screenshotSuccess = true; }
           break;
         }
         case 'darwin': {
           await execAsync(`screencapture -x "${filePath}"`, { timeout: 10000 });
-          if (require('fs').existsSync(filePath)) { screenshotSuccess = true; }
+          if (existsSync(filePath)) { screenshotSuccess = true; }
           break;
         }
         default: {
           await execAsync(`gnome-screenshot -f "${filePath}" 2>/dev/null || scrot "${filePath}" 2>/dev/null || import -window root "${filePath}"`, { timeout: 10000 });
-          if (require('fs').existsSync(filePath)) { screenshotSuccess = true; }
+          if (existsSync(filePath)) { screenshotSuccess = true; }
         }
       }
     } catch (err) {
@@ -200,9 +202,9 @@ export class DesktopTool implements Tool {
       `[System Info]`,
       `Platform: ${platform} (${process.arch})`,
       `Node: ${process.version}`,
-      `CPUs: ${require('os').cpus().length} cores`,
-      `Memory: ${Math.round(require('os').totalmem() / 1024 / 1024 / 1024)}GB total, ${Math.round(require('os').freemem() / 1024 / 1024 / 1024)}GB free`,
-      `Uptime: ${Math.round(require('os').uptime() / 3600)}h`,
+      `CPUs: ${os.cpus().length} cores`,
+      `Memory: ${Math.round(os.totalmem() / 1024 / 1024 / 1024)}GB total, ${Math.round(os.freemem() / 1024 / 1024 / 1024)}GB free`,
+      `Uptime: ${Math.round(os.uptime() / 3600)}h`,
       `User: ${process.env.USERNAME || process.env.USER || 'unknown}'}`,
       `Home: ${process.env.USERPROFILE || process.env.HOME || 'unknown}'}`,
       `CWD: ${process.cwd()}`,

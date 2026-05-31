@@ -3,7 +3,7 @@
  *
  * 核心控制循环：接收输入 → 构建上下文 → 调用 LLM → 执行工具 → 输出结果
  *
- * v0.4.0 改进：
+ * v0.5.0 改进：
  * - 集成 KV 缓存（LLM 响应 + 工具结果缓存）
  * - Token 预算追踪
  * - 工具结果摘要（省 token）
@@ -219,6 +219,13 @@ export class AgentLoop {
   }
 
   getIterationCount(): number { return this.iterationCount; }
+
+  /** 获取所有已注册工具的定义（供 CLI/渠道构建 prompt 使用） */
+  getToolDefinitions(): ToolDefinition[] {
+    return this.config.tools.getToolDefinitions() as ToolDefinition[];
+  }
+
+
   getTokenUsage(): { input: number; output: number; total: number } {
     return { input: this.totalInputTokens, output: this.totalOutputTokens, total: this.totalInputTokens + this.totalOutputTokens };
   }

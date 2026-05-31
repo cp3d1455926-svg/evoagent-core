@@ -2,7 +2,7 @@
  * EvoAgent — LLM 客户端抽象
  *
  * 支持多后端：Anthropic Claude、OpenAI、LongCat 等
- * v0.4.0 改进：
+ * v0.5.0 改进：
  * - KV 缓存集成，提高缓存命中率
  * - Token 预算控制
  * - 智能消息截断（省 token）

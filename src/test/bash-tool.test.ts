@@ -2,7 +2,7 @@
  * EvoAgent — Bash Tool 测试
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { BashTool } from '../tools/bash';
+import { BashTool } from '../tools/bash.js';
 
 describe('BashTool', () => {
   let tool: BashTool;

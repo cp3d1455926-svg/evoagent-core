@@ -12,12 +12,14 @@ describe('ToolExecutor', () => {
     expect(names).toContain('mcp');
     expect(names).toContain('git');
     expect(names).toContain('desktop');
+    expect(names).toContain('workspace');
+    expect(names).toContain('skill');
   });
 
   it('should return tool definitions', () => {
     const te = new ToolExecutor();
     const defs = te.getToolDefinitions();
-    expect(defs.length).toBe(7);
+    expect(defs.length).toBe(9);
     for (const def of defs) {
       expect(def).toHaveProperty('name');
       expect(def).toHaveProperty('description');
